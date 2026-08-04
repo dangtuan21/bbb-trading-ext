@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "RebelsFunding Positions Tracker",
+  "version": "1.0.0",
+  "description": "Scans every active RebelsFunding account (Challenge + Funded) via RF Client Zone and RF-Trader, and writes the results to a local CSV file.",
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": [
+    "https://rf-zone.rebelsfunding.com/*",
+    "https://*.rf-trader.com/*",
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "RebelsFunding Positions Tracker"
+  }
+}

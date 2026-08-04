@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RebelsFunding Positions Tracker</title>
+<style>
+  body { font-family: -apple-system, sans-serif; width: 360px; padding: 12px; font-size: 13px; color: #1a1a1a; }
+  h1 { font-size: 14px; margin: 0 0 10px; }
+  .row { display: flex; justify-content: space-between; margin: 4px 0; }
+  .label { color: #666; }
+  .status { padding: 8px; border-radius: 6px; margin: 8px 0; }
+  .status.ok { background: #e6f7ee; color: #0a7a3d; }
+  .status.warn { background: #fff4e5; color: #9a5b00; }
+  .status.busy { background: #eaf1ff; color: #1c4bd1; }
+  button { width: 100%; padding: 8px; margin-top: 6px; border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; cursor: pointer; }
+  button:hover { background: #eee; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .settings-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .settings-row input { width: 50px; }
+  #diagLog { margin-top: 8px; white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 11px; max-height: 260px; overflow: auto; border: 1px solid #eee; padding: 4px; }
+  #diagLog:empty { display: none; border: none; padding: 0; }
+</style>
+</head>
+<body>
+  <h1>RebelsFunding Positions Tracker</h1>
+
+  <div id="statusBox" class="status warn">Checking...</div>
+
+  <div class="row"><span class="label">Last scan</span><span id="lastScan">–</span></div>
+  <div class="row"><span class="label">Accounts scanned</span><span id="accountCount">–</span></div>
+  <div class="row"><span class="label">Rows written</span><span id="rowCount">–</span></div>
+
+  <button id="runScanBtn">Run Full Scan Now</button>
+
+  <div class="settings-row">
+    <label for="intervalInput">Scan every</label>
+    <input id="intervalInput" type="number" min="0" value="20">
+    <span>minutes (0 = off)</span>
+    <button id="saveIntervalBtn" style="width:auto;">Save</button>
+  </div>
+
+  <div id="diagLog"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

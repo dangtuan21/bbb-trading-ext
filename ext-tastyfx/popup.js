@@ -1,0 +1,84 @@
+const SERVER_URL = 'http://127.0.0.1:8765';
+
+const statusBox = document.getElementById('statusBox');
+const lastWriteEl = document.getElementById('lastWrite');
+const intervalInput = document.getElementById('intervalInput');
+const saveIntervalBtn = document.getElementById('saveIntervalBtn');
+const actionLog = document.getElementById('actionLog');
+const positionsTable = document.getElementById('positionsTable');
+const positionsBody = document.getElementById('positionsBody');
+const forceCaptureBtn = document.getElementById('forceCaptureBtn');
+const lastErrorRow = document.getElementById('lastErrorRow');
+const lastErrorEl = document.getElementById('lastError');
+
+function fmtTime(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  return d.toLocaleTimeString();
+}
+
+async function refreshStatus() {
+  const data = await chrome.storage.local.get([
+    'latestSnapshot', 'lastWriteTime', 'captureIntervalMinutes', 'lastWriteError'
+  ]);
+
+  if (data.lastWriteError) {
+    lastErrorRow.style.display = '';
+    lastErrorEl.textContent = data.lastWriteError;
+  } else {
+    lastErrorRow.style.display = 'none';
+  }
+
+  try {
+    const res = await fetch(`${SERVER_URL}/status`);
+    const status = await res.json();
+    statusBox.className = 'status ok';
+    statusBox.textContent = `Server running -- last write ${fmtTime(status.tastyfx?.lastWriteTime)}`;
+  } catch {
+    statusBox.className = 'status warn';
+    statusBox.textContent = 'Local server not reachable. Run "node server.js" (see server/ folder).';
+  }
+
+  lastWriteEl.textContent = fmtTime(data.lastWriteTime);
+  intervalInput.value = data.captureIntervalMinutes ?? 20;
+
+  if (data.latestSnapshot?.positions?.length) {
+    positionsTable.style.display = '';
+    positionsBody.innerHTML = '';
+    for (const p of data.latestSnapshot.positions) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${p.market}</td><td>${p.size}</td><td>${p.latest}</td><td>${p.profitLossUsd}</td>`;
+      positionsBody.appendChild(tr);
+    }
+  }
+}
+
+forceCaptureBtn.addEventListener('click', async () => {
+  forceCaptureBtn.textContent = 'Writing…';
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.url?.includes('deal.ig.com')) {
+    forceCaptureBtn.textContent = 'Write Now';
+    actionLog.textContent = 'Active tab is not deal.ig.com.';
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: 'FORCE_CAPTURE' });
+    // Give the background script a moment to finish the POST to the server.
+    await new Promise((r) => setTimeout(r, 800));
+    await refreshStatus();
+    actionLog.textContent = '';
+  } catch (err) {
+    actionLog.textContent = `Could not reach content script: ${err.message}`;
+  }
+  forceCaptureBtn.textContent = 'Write Now';
+});
+
+saveIntervalBtn.addEventListener('click', async () => {
+  const minutes = Math.max(1, parseInt(intervalInput.value, 10) || 5);
+  intervalInput.value = minutes;
+  await chrome.storage.local.set({ captureIntervalMinutes: minutes });
+  saveIntervalBtn.textContent = 'Saved';
+  setTimeout(() => (saveIntervalBtn.textContent = 'Save'), 1000);
+});
+
+refreshStatus();
