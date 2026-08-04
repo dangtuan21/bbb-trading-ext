@@ -1,7 +1,7 @@
-// Zero-dependency local server shared by the TastyFX, RebelsFunding, and
-// FTMO Positions Tracker extensions. One process, one port, one endpoint --
-// POST /write with a "platform" field routes to the right CSV builder/file.
-// Binds to 127.0.0.1 only -- not reachable from the network.
+// Zero-dependency local server shared by the TastyFX, RebelsFunding, FTMO,
+// and AlphaCapital Positions Tracker extensions. One process, one port, one
+// endpoint -- POST /write with a "platform" field routes to the right CSV
+// builder/file. Binds to 127.0.0.1 only -- not reachable from the network.
 
 const http = require('http');
 const fs = require('fs');
@@ -13,20 +13,10 @@ const PLATFORM = Object.freeze({
   TASTYFX: 'tastyfx',
   REBELSFUNDING: 'rebelsfunding',
   FTMO: 'ftmo',
+  ALPHACAPITAL: 'alphacapital',
 });
 
-const TASTYFX_FILE = path.join(__dirname, 'tastyfx-positions.csv');
-const REBELSFUNDING_FILE = path.join(__dirname, 'rebelsfunding-positions.csv');
-const FTMO_FILE = path.join(__dirname, 'ftmo-positions.csv');
-// Mirrored into trading-front's static data dir as separate files -- the
-// dashboard fetches each and merges them client-side (see
-// usePositionLog.js) rather than this server merging them into one file,
-// since each platform's write only knows its own rows and shouldn't have to
-// read-modify-write a shared file just to avoid clobbering the others'.
 const FRONTEND_DATA_DIR = path.join(__dirname, '..', 'trading-front', 'public', 'data');
-const TASTYFX_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'tastyfx.csv');
-const REBELSFUNDING_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'rebelsfunding.csv');
-const FTMO_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'ftmo.csv');
 
 function csvField(value) {
   const str = value === null || value === undefined ? '' : String(value);
@@ -73,9 +63,9 @@ function buildTastyfxCsv({ snapshot, accountId, accountLabel }) {
   return lines.join('\n') + '\n';
 }
 
-// Shared by RebelsFunding and FTMO -- both send an already-shaped array of
-// rows (the extension does all scraping/shaping itself), unlike tastyfx
-// which sends a raw snapshot this server transforms.
+// Shared by RebelsFunding, FTMO, and AlphaCapital -- all send an
+// already-shaped array of rows (the extension does all scraping/shaping
+// itself), unlike tastyfx which sends a raw snapshot this server transforms.
 const ROWS_HEADER = [
   'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
@@ -91,6 +81,36 @@ function buildRowsCsv({ rows }) {
   }
   return lines.join('\n') + '\n';
 }
+
+// One entry per platform: where its CSV lives, where it mirrors to for
+// trading-front, how to build the CSV from the POSTed payload, and how to
+// count rows for the log line / response.
+const PLATFORM_CONFIG = {
+  [PLATFORM.TASTYFX]: {
+    file: path.join(__dirname, 'tastyfx-positions.csv'),
+    mirrorFile: path.join(FRONTEND_DATA_DIR, 'tastyfx.csv'),
+    build: buildTastyfxCsv,
+    countRows: (payload) => payload.snapshot.positions?.length ?? 0,
+  },
+  [PLATFORM.REBELSFUNDING]: {
+    file: path.join(__dirname, 'rebelsfunding-positions.csv'),
+    mirrorFile: path.join(FRONTEND_DATA_DIR, 'rebelsfunding.csv'),
+    build: buildRowsCsv,
+    countRows: (payload) => payload.rows.length,
+  },
+  [PLATFORM.FTMO]: {
+    file: path.join(__dirname, 'ftmo-positions.csv'),
+    mirrorFile: path.join(FRONTEND_DATA_DIR, 'ftmo.csv'),
+    build: buildRowsCsv,
+    countRows: (payload) => payload.rows.length,
+  },
+  [PLATFORM.ALPHACAPITAL]: {
+    file: path.join(__dirname, 'alphacapital-positions.csv'),
+    mirrorFile: path.join(FRONTEND_DATA_DIR, 'alphacapital.csv'),
+    build: buildRowsCsv,
+    countRows: (payload) => payload.rows.length,
+  },
+};
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -125,13 +145,12 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/status') {
+    const status = { ok: true };
+    for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
+      status[platform] = fileStatus(config.file);
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      ok: true,
-      [PLATFORM.TASTYFX]: fileStatus(TASTYFX_FILE),
-      [PLATFORM.REBELSFUNDING]: fileStatus(REBELSFUNDING_FILE),
-      [PLATFORM.FTMO]: fileStatus(FTMO_FILE),
-    }));
+    res.end(JSON.stringify(status));
     return;
   }
 
@@ -141,30 +160,16 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        if (payload.platform === PLATFORM.TASTYFX) {
-          const csv = buildTastyfxCsv(payload);
-          fs.writeFileSync(TASTYFX_FILE, csv);
-          mirrorToFrontend(TASTYFX_MIRROR_FILE, csv);
-          console.log(`[${new Date().toISOString()}] ${PLATFORM.TASTYFX}: wrote ${payload.snapshot.positions?.length ?? 0} position row(s)`);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true }));
-        } else if (payload.platform === PLATFORM.REBELSFUNDING) {
-          const csv = buildRowsCsv(payload);
-          fs.writeFileSync(REBELSFUNDING_FILE, csv);
-          mirrorToFrontend(REBELSFUNDING_MIRROR_FILE, csv);
-          console.log(`[${new Date().toISOString()}] ${PLATFORM.REBELSFUNDING}: wrote ${payload.rows.length} row(s)`);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, count: payload.rows.length }));
-        } else if (payload.platform === PLATFORM.FTMO) {
-          const csv = buildRowsCsv(payload);
-          fs.writeFileSync(FTMO_FILE, csv);
-          mirrorToFrontend(FTMO_MIRROR_FILE, csv);
-          console.log(`[${new Date().toISOString()}] ${PLATFORM.FTMO}: wrote ${payload.rows.length} row(s)`);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, count: payload.rows.length }));
-        } else {
-          throw new Error(`Unknown platform: ${payload.platform}`);
-        }
+        const config = PLATFORM_CONFIG[payload.platform];
+        if (!config) throw new Error(`Unknown platform: ${payload.platform}`);
+
+        const csv = config.build(payload);
+        fs.writeFileSync(config.file, csv);
+        mirrorToFrontend(config.mirrorFile, csv);
+        const count = config.countRows(payload);
+        console.log(`[${new Date().toISOString()}] ${payload.platform}: wrote ${count} row(s)`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, count }));
       } catch (err) {
         console.error('Failed to handle write:', err);
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -180,7 +185,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Trading Positions Tracker server listening on http://127.0.0.1:${PORT}`);
-  console.log(`  ${PLATFORM.TASTYFX} -> ${TASTYFX_FILE}`);
-  console.log(`  ${PLATFORM.REBELSFUNDING} -> ${REBELSFUNDING_FILE}`);
-  console.log(`  ${PLATFORM.FTMO} -> ${FTMO_FILE}`);
+  for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
+    console.log(`  ${platform} -> ${config.file}`);
+  }
 });

@@ -9,6 +9,7 @@ const SOURCES = [
   { platform: "tastyfx", url: `${import.meta.env.BASE_URL}data/tastyfx.csv` },
   { platform: "rebelsfunding", url: `${import.meta.env.BASE_URL}data/rebelsfunding.csv` },
   { platform: "ftmo", url: `${import.meta.env.BASE_URL}data/ftmo.csv` },
+  { platform: "alphacapital", url: `${import.meta.env.BASE_URL}data/alphacapital.csv` },
 ]
 
 function cleanRow(row) {

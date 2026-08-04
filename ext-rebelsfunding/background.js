@@ -107,22 +107,74 @@ function fnIsLoggedIn() {
   return false;
 }
 
-function fnClickTab(tabName) {
+// NOTE: this function is injected into the page via
+// chrome.scripting.executeScript, which only serializes the function's OWN
+// body -- it can't reference other top-level functions in this file (they
+// don't exist in the injected context). simulateClick is therefore defined
+// INSIDE, not shared at module scope, even though that duplicates it
+// relative to AlphaCapital's copy. (A prior version called an outer
+// simulateClick and regressed BOTH tabs to "tab-click-failed" -- the
+// ReferenceError it threw is invisible through this API, see
+// fnEnsurePanelAndGetBbox's equivalent note in ext-alphacapital/background.js.)
+async function fnClickTab(tabName) {
+  // Dispatches real mouse events instead of calling el.click() -- confirmed
+  // in a sibling extension (AlphaCapital) that native .click() can silently
+  // do nothing on elements whose framework listens for real pointer/mouse
+  // events rather than the DOM .click() method. Retrying the tab switch
+  // with escalating waits made no difference at all here, which timing
+  // alone can't explain -- pointing at the click itself never having
+  // worked, not a rendering delay.
+  function simulateClick(el) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      const Ctor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+      el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }
+  }
+  // Chakra UI tabs (confirmed live: class "chakra-tabs__tab") track the
+  // active tab via aria-selected -- reading this after the click tells us
+  // definitively whether the click actually changed which tab is selected
+  // (a real switch that just needs more time/a different tabIndex
+  // afterward) versus never registering with the app's click handler at
+  // all (same class of problem as the ReferenceError-caused regression
+  // this function already hit once).
+  function tabStates() {
+    return Array.from(document.querySelectorAll('[role="tab"]')).map((t) => ({
+      text: t.textContent.trim(),
+      selected: t.getAttribute('aria-selected'),
+    }));
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const before = tabStates();
   const roleTabs = document.querySelectorAll('[role="tab"]');
   for (const t of roleTabs) {
     if (t.textContent.trim() === tabName) {
-      t.click();
-      return true;
+      simulateClick(t);
+      await sleep(600);
+      return { clicked: true, via: 'role-tab', tag: t.tagName, cls: t.className || '', before, after: tabStates() };
     }
   }
   const all = document.querySelectorAll('body *');
   for (const el of all) {
     if (el.children.length === 0 && el.textContent.trim() === tabName) {
-      el.click();
-      return true;
+      simulateClick(el);
+      await sleep(600);
+      return {
+        clicked: true,
+        via: 'leaf-text',
+        tag: el.tagName,
+        cls: el.className || '',
+        parentTag: el.parentElement?.tagName,
+        parentCls: el.parentElement?.className || '',
+        before,
+        after: tabStates(),
+      };
     }
   }
-  return false;
+  return { clicked: false, before };
 }
 
 function fnParseAccounts(tabLabel) {
@@ -166,8 +218,17 @@ function fnParseAccounts(tabLabel) {
 }
 
 function fnClickDetailsAt(index) {
+  // Chakra keeps every tab's TabPanel mounted in the DOM simultaneously
+  // (hidden via CSS, not unmounted) -- confirmed live via aria-selected
+  // correctly flipping to "Funded" on click, yet still landing on
+  // Challenge's first account. Without a visibility filter, this indexes
+  // across ALL tabs' Details buttons at once, not just the active tab's --
+  // Challenge's buttons sort first in DOM order, so index 0 for ANY other
+  // tab always resolved to Challenge's index 0 instead. fnParseAccounts
+  // (discovery) didn't have this bug because .innerText, unlike
+  // .textContent, already excludes hidden elements' text.
   const buttons = Array.from(document.querySelectorAll('button, [role="button"]')).filter(
-    (b) => b.textContent.trim() === 'Details'
+    (b) => b.textContent.trim() === 'Details' && b.offsetParent !== null
   );
   if (index < buttons.length) {
     buttons[index].click();
@@ -176,7 +237,14 @@ function fnClickDetailsAt(index) {
   return false;
 }
 
-function fnScrapeBalanceEquity() {
+// Also checks whether `expectedAccountId` actually appears on this page --
+// confirmed via a real run that a failed tab-switch (dashboard resets to
+// its default tab on every fresh navigation, and "Details" buttons are
+// indexed per-tab) can silently land on a DIFFERENT account's Details page
+// at the same tabIndex, which then gets attributed to the wrong AccountID
+// in the CSV with no error at all. This makes that mismatch detectable
+// instead of silently trusting whatever balance/equity is on screen.
+function fnScrapeBalanceEquity(expectedAccountId) {
   function findContainerWithText(marker) {
     const articles = document.querySelectorAll('article');
     for (const el of articles) {
@@ -191,7 +259,12 @@ function fnScrapeBalanceEquity() {
     const idx = lines.indexOf(label);
     return idx >= 0 && idx + 1 < lines.length ? lines[idx + 1] : '';
   }
-  return { balance: valueAfter('Balance'), equity: valueAfter('Equity') };
+  const bodyText = document.body.innerText || document.body.textContent || '';
+  return {
+    balance: valueAfter('Balance'),
+    equity: valueAfter('Equity'),
+    accountIdFound: expectedAccountId ? bodyText.includes(expectedAccountId) : null,
+  };
 }
 
 function fnClickRFTraderLogin() {
@@ -388,16 +461,48 @@ async function scrapeAccount(scanTabId, acc) {
   await waitForTabComplete(scanTabId);
   await waitForTextInTab(scanTabId, 'Details', 10000);
 
-  if (acc.tab) {
-    await execInTab(scanTabId, fnClickTab, [acc.tab]);
-    await sleep(800);
-  }
-  await execInTab(scanTabId, fnClickDetailsAt, [acc.tabIndex]);
-  // "Details" click is an in-app route change, not a real page load -- poll
-  // for the new content instead of assuming a fixed delay is enough.
-  await waitForTextInTab(scanTabId, 'Balance', 10000);
+  // Every account processed so far in a live run happened to already be on
+  // the default tab, so a tab switch that silently failed would never have
+  // been caught -- landing on the DEFAULT tab's same tabIndex instead is
+  // exactly the account-ID-mismatch failure mode this retries against.
+  // Only worth retrying when an actual tab switch is involved; escalating
+  // wait per attempt in case that tab's content just needs more time to
+  // render than the default tab's did.
+  let details = null;
+  let tabClickResult = null;
+  const attempts = acc.tab ? 3 : 1;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (acc.tab) {
+      tabClickResult = await execInTab(scanTabId, fnClickTab, [acc.tab]);
+      await sleep(1000 * (attempt + 1));
+    }
+    await execInTab(scanTabId, fnClickDetailsAt, [acc.tabIndex]);
+    // "Details" click is an in-app route change, not a real page load --
+    // poll for the new content instead of assuming a fixed delay is enough.
+    await waitForTextInTab(scanTabId, 'Balance', 10000);
+    details = await execInTab(scanTabId, fnScrapeBalanceEquity, [acc.account]);
+    if (details?.accountIdFound !== false) break; // matched, or verification wasn't possible either way
 
-  const details = await execInTab(scanTabId, fnScrapeBalanceEquity);
+    if (attempt < attempts - 1) {
+      // Currently sitting on whatever account's Details page this wrongly
+      // landed on -- re-navigate to a clean dashboard before retrying
+      // rather than clicking again from an already-wrong state.
+      await chrome.tabs.update(scanTabId, { url: REBELSFUNDING_URL });
+      await waitForTabComplete(scanTabId);
+      await waitForTextInTab(scanTabId, 'Details', 10000);
+    }
+  }
+
+  // If the account ID we expect still isn't anywhere on this Details page
+  // after retrying, bail out rather than attributing another account's
+  // real balance/positions to this one with no indication anything went
+  // wrong.
+  if (details?.accountIdFound === false) {
+    return {
+      rows: [_blankRowForAccount(acc)],
+      diag: { reason: 'account-id-mismatch', expected: acc.account, balanceSeen: details?.balance, attempts, tabClickResult },
+    };
+  }
   const balance = money(details?.balance || acc.balance);
   let equity = money(details?.equity || '');
 
@@ -421,7 +526,9 @@ async function scrapeAccount(scanTabId, acc) {
         diag = result.diag;
         if (result.equity) equity = result.equity;
       } finally {
-        chrome.tabs.remove(rfTab.id).catch(() => {});
+        // Awaited (not fire-and-forget) so the next account's flow can't
+        // start while this tab is still mid-close.
+        await chrome.tabs.remove(rfTab.id).catch(() => {});
       }
     } else {
       diag = { reason: 'rf-trader-tab-never-opened' };
@@ -472,6 +579,21 @@ function fmtDate(d) {
   return `${mm}-${dd}-${d.getFullYear()}`;
 }
 
+// Placeholder row for an account that WAS discovered on the dashboard (so
+// its ID/program are real) but whose Details/positions couldn't be trusted
+// for some other reason -- e.g. an account-ID mismatch, or the scrape
+// throwing entirely. More informative than dropping the account's row
+// silently: AccountID/AccountLabel stay real, only the balance/position
+// fields are blank.
+function _blankRowForAccount(acc) {
+  return {
+    SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
+    AccountLabel: acc.program, IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
+    PosID: '', Symbol: '', Direction: '', Size: '', SizeUnit: '', Opening: '', Latest: '',
+    StopLoss: '', TakeProfit: '', PositionPL: '',
+  };
+}
+
 async function runFullScan() {
   await chrome.storage.local.set({ scanStatus: 'running', lastScanError: null });
 
@@ -498,8 +620,8 @@ async function runFullScan() {
     const allAccounts = [];
     const seenIds = new Set();
     for (const tabLabel of ['Challenge', 'Funded']) {
-      const clicked = await execInTab(scanTabId, fnClickTab, [tabLabel]);
-      if (!clicked) {
+      const clickResult = await execInTab(scanTabId, fnClickTab, [tabLabel]);
+      if (!clickResult?.clicked) {
         diagnostics.push({ tab: tabLabel, reason: 'tab-click-failed' });
         continue;
       }
@@ -522,12 +644,7 @@ async function runFullScan() {
         if (result.diag) diagnostics.push({ account: acc.account, ...result.diag });
       } catch (err) {
         diagnostics.push({ account: acc.account, reason: 'scrape-threw', error: String(err) });
-        rows.push({
-          SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
-          AccountLabel: acc.program, IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
-          PosID: '', Symbol: '', Direction: '', Size: '', SizeUnit: '', Opening: '', Latest: '',
-          StopLoss: '', TakeProfit: '', PositionPL: '',
-        });
+        rows.push(_blankRowForAccount(acc));
       }
     }
 

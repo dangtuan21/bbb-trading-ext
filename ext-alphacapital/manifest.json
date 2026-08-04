@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "AlphaCapital Positions Tracker",
+  "version": "1.0.0",
+  "description": "Scans the AlphaCapital (cTrader) account dashboard and writes Balance/leverage/open positions to a local CSV file. Positions are read via in-browser OCR since this platform renders its grid on <canvas>, not DOM text.",
+  "permissions": ["storage", "tabs", "scripting", "offscreen"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["vendor/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AlphaCapital Positions Tracker"
+  }
+}
