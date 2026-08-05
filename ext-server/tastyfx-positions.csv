@@ -1,6 +1,6 @@
 SnapshotDate,Platform,AccountID,AccountLabel,Balance,Equity,AccountPL,PosID,Symbol,Direction,Size,SizeUnit,Opening,Latest,StopLoss,TakeProfit,PositionPL
-08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-2.20,n/a,USD/CAD,Buy,0.08,lot,1.40244,1.40683,1.3836,1.4118,24.96
-08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-2.20,n/a,GBP/CHF,Buy,0.08,lot,1.0893,1.08794,none,none,-13.45
-08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-2.20,n/a,NZD/CAD,Buy,0.08,lot,0.82584,0.82637,none,none,3.01
-08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-2.20,n/a,EUR/CHF,Buy,0.08,lot,0.93264,0.93272,none,none,0.79
-08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-2.20,n/a,AUD/USD,Sell,0.08,lot,0.70213,0.70432,none,none,-17.52
+08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-6.17,n/a,USD/CAD,Buy,0.08,lot,1.40244,1.40706,1.3836,1.4118,26.27
+08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-6.17,n/a,GBP/CHF,Buy,0.08,lot,1.0893,1.08778,none,none,-15.03
+08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-6.17,n/a,NZD/CAD,Buy,0.08,lot,0.82584,0.82574,none,none,-0.57
+08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-6.17,n/a,EUR/CHF,Buy,0.08,lot,0.93264,0.93266,none,none,0.20
+08-04-2026,tastyfx,DTEN3,Standard,1929.14,,-6.17,n/a,AUD/USD,Sell,0.08,lot,0.70213,0.70426,none,none,-17.04

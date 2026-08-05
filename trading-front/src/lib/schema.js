@@ -1,13 +1,12 @@
-// Union of both CSVs ext-server/server.js produces (tastyfx.csv +
-// rebelsfunding.csv, merged client-side in usePositionLog.js) -- keep in
-// sync if either schema changes. IsRealMoney only comes from
-// rebelsfunding.csv; tastyfx rows just show blank for it.
+// Union of the CSVs ext-server/server.js produces, merged client-side in
+// usePositionLog.js -- keep in sync if any platform's schema changes.
+// IsRealMoney is deliberately not listed here even though the underlying
+// CSVs still have it -- not displayed in the dashboard.
 export const POSITIONLOG_FIELDS = [
   "SnapshotDate",
   "Platform",
   "AccountID",
   "AccountLabel",
-  "IsRealMoney",
   "Balance",
   "Equity",
   "AccountPL",
