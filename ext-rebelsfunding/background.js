@@ -340,7 +340,7 @@ function fnClickPositionsTab() {
   return null;
 }
 
-function fnScrapePositions() {
+async function fnScrapePositions() {
   const ORDER_RE = /^#(\d+)\s+([A-Z]{3}\/[A-Z]{3})\s+(Buy|Sell)/i;
   function field(row, selector) {
     const el = row.querySelector(selector);
@@ -353,36 +353,79 @@ function fnScrapePositions() {
     const t = (v || '').trim();
     return !t || t === '-' || t === '--' || t === 'n/a' ? 'none' : t;
   }
+  // Class-to-text map for one row's direct "*-info" cells -- lets a wrong
+  // field mapping (e.g. StopLoss/TakeProfit swapped) be confirmed directly
+  // against the real class names instead of guessing blind, same technique
+  // that found tastyfx's P/L column bug.
+  function sampleCellMap(row) {
+    const map = {};
+    for (const cell of row.querySelectorAll('[class*="-info"]')) {
+      const cls = Array.from(cell.classList).find((c) => c.endsWith('-info'));
+      if (!cls || cls in map) continue;
+      map[cls] = cell.textContent.trim();
+    }
+    return map;
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const rows = document.querySelectorAll('lib-trade-line');
-  const positions = [];
-  for (const row of rows) {
-    const orderText = field(row, '.order-info .main-info');
-    const m = ORDER_RE.exec(orderText);
-    if (!m) continue;
-    positions.push({
-      PosID: '#' + m[1],
-      Symbol: m[2].toUpperCase(),
-      Direction: m[3][0].toUpperCase() + m[3].slice(1).toLowerCase(),
-      Size: field(row, '.volume-info .main-info').replace('lot', '').trim(),
-      SizeUnit: 'lot',
-      Opening: field(row, '.open-price-info .main-info'),
-      Latest: field(row, '.price-info .main-info'),
-      StopLoss: slTp(field(row, '.sl-info .main-info')),
-      TakeProfit: slTp(field(row, '.tp-info .main-info')),
-      PositionPL: money(field(row, '.total-info .main-info')),
-    });
+  // RF-Trader renders "UPL: --" as a placeholder until the live price feed
+  // populates it, and .total-info (UPL+fee, rendered by the app itself, not
+  // computed here) reflects that same not-ready state -- confirmed via a
+  // real run where .total-info read as exactly the transaction fee alone
+  // (e.g. "-1.76") because UPL was still "--" at the moment of scraping,
+  // while every row whose UPL HAD populated scraped correctly. Poll a few
+  // times rather than trusting the first read.
+  function scrapeOnce() {
+    const rows = document.querySelectorAll('lib-trade-line');
+    const positions = [];
+    let anyNotReady = false;
+    for (const row of rows) {
+      const orderText = field(row, '.order-info .main-info');
+      const m = ORDER_RE.exec(orderText);
+      if (!m) continue;
+      if (/UPL:\s*--/.test(field(row, '.pnl-info'))) anyNotReady = true;
+      positions.push({
+        PosID: '#' + m[1],
+        Symbol: m[2].toUpperCase(),
+        Direction: m[3][0].toUpperCase() + m[3].slice(1).toLowerCase(),
+        Size: field(row, '.volume-info .main-info').replace('lot', '').trim(),
+        SizeUnit: 'lot',
+        Opening: field(row, '.open-price-info .main-info'),
+        Latest: field(row, '.price-info .main-info'),
+        StopLoss: slTp(field(row, '.sl-info .main-info')),
+        TakeProfit: slTp(field(row, '.tp-info .main-info')),
+        PositionPL: money(field(row, '.total-info .main-info')),
+      });
+    }
+
+    // RF-Trader's own summary bar shows Balance / UPL / Equity / Used
+    // Margin / Free Margin directly -- read UPL (Unrealized P/L) as
+    // AccountPL from there instead of computing Equity-Balance ourselves.
+    const bodyText = document.body.innerText || '';
+    const eqMatch = /Equity\s*\$?\s*([\d,]+\.\d{2})/.exec(bodyText);
+    const uplMatch = /UPL\s*\$?\s*(-?[\d,]+\.\d{2})/.exec(bodyText);
+    if (rows.length > 0 && !uplMatch) anyNotReady = true;
+
+    return {
+      positions,
+      equity: eqMatch ? eqMatch[1].replace(/,/g, '') : '',
+      accountPL: uplMatch ? uplMatch[1].replace(/,/g, '') : '',
+      rowCount: rows.length,
+      debugSample: positions.length === 0 && rows.length > 0 ? rows[0].outerHTML.slice(0, 1500) : null,
+      sampleCellMap: rows.length > 0 ? sampleCellMap(rows[0]) : null,
+      anyNotReady,
+    };
   }
 
-  const bodyText = document.body.innerText || '';
-  const eqMatch = /Equity\s*\$?\s*([\d,]+\.\d{2})/.exec(bodyText);
-
-  return {
-    positions,
-    equity: eqMatch ? eqMatch[1].replace(/,/g, '') : '',
-    rowCount: rows.length,
-    debugSample: positions.length === 0 && rows.length > 0 ? rows[0].outerHTML.slice(0, 1500) : null,
-  };
+  let result = scrapeOnce();
+  let pollAttempts = 0;
+  while (result.anyNotReady && pollAttempts < 4) {
+    await sleep(1000);
+    result = scrapeOnce();
+    pollAttempts += 1;
+  }
+  result.pollAttempts = pollAttempts;
+  return result;
 }
 
 // ---- Orchestration ----
@@ -446,11 +489,15 @@ async function scrapeRfTraderPositions(tabId) {
   return {
     positions: scraped.positions || [],
     equity: scraped.equity || '',
+    accountPL: scraped.accountPL || '',
     diag: {
       targetFrameId,
       clickResult,
       rowCount: scraped.rowCount,
       debugSample: scraped.debugSample,
+      sampleCellMap: scraped.sampleCellMap,
+      pollAttempts: scraped.pollAttempts,
+      stillNotReady: scraped.anyNotReady,
       error: scraped.error,
     },
   };
@@ -507,6 +554,7 @@ async function scrapeAccount(scanTabId, acc) {
   let equity = money(details?.equity || '');
 
   let positions = [];
+  let accountPL = '';
   let diag = null;
   // waitForNewTab must start listening BEFORE the click, not after -- the
   // click's window.open() can fire (and the tabs.onCreated event with it)
@@ -525,6 +573,7 @@ async function scrapeAccount(scanTabId, acc) {
         positions = result.positions;
         diag = result.diag;
         if (result.equity) equity = result.equity;
+        if (result.accountPL) accountPL = result.accountPL;
       } finally {
         // Awaited (not fire-and-forget) so the next account's flow can't
         // start while this tab is still mid-close.
@@ -536,13 +585,9 @@ async function scrapeAccount(scanTabId, acc) {
   } else {
     diag = { reason: 'rf-trader-login-button-not-found' };
   }
-
-  let accountPL = '';
-  const balNum = parseFloat(balance);
-  const eqNum = parseFloat(equity);
-  if (!Number.isNaN(balNum) && !Number.isNaN(eqNum)) {
-    accountPL = Math.round((eqNum - balNum) * 100) / 100;
-  }
+  // AccountPL is read directly from RF-Trader's own UPL figure (see
+  // fnScrapePositions), not computed from Equity-Balance -- left blank if
+  // RF-Trader couldn't be reached at all, rather than derived.
 
   const isRealMoney = /fund/i.test(acc.program || '') ? 'Yes' : 'No';
 

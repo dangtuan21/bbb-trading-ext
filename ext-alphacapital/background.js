@@ -413,9 +413,10 @@ async function runFullScan() {
       AccountLabel: accountInfo.leverage ? `Leverage ${accountInfo.leverage}` : '',
       IsRealMoney: accountInfo.isRealMoney,
       Balance: accountInfo.balance,
-      // OCR doesn't reliably separate Equity from Balance yet -- same
-      // caveat as the Python reference.
-      Equity: accountInfo.balance,
+      // OCR doesn't reliably separate a real Equity figure from Balance --
+      // left blank rather than assumed equal to Balance, since that's not
+      // an actual read value either.
+      Equity: '',
       AccountPL: '',
     };
 

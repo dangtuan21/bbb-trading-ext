@@ -59,12 +59,10 @@ function getPageLines() {
 function parseAccountSummary(lines) {
   const balance = money(valueAfterAny(lines, LABEL_VARIANTS.balance));
   const equity = money(valueAfterAny(lines, LABEL_VARIANTS.equity));
-  let accountPL = money(valueAfterAny(lines, LABEL_VARIANTS.pl));
-  if (!accountPL && balance && equity) {
-    const b = parseFloat(balance);
-    const e = parseFloat(equity);
-    if (!Number.isNaN(b) && !Number.isNaN(e)) accountPL = String(Math.round((e - b) * 100) / 100);
-  }
+  // Read directly from whichever P/L label is actually on the page (see
+  // LABEL_VARIANTS.pl) -- no Equity-Balance fallback if none of those
+  // labels are found; left blank rather than derived.
+  const accountPL = money(valueAfterAny(lines, LABEL_VARIANTS.pl));
   return { balance, equity, accountPL };
 }
 

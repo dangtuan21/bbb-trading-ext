@@ -45,7 +45,11 @@ function buildTastyfxCsv({ snapshot, accountId, accountLabel }) {
   const snapshotDate = fmtDate(snapshot.timestamp);
   const balance = snapshot.account?.funds ?? null;
   const accountPL = snapshot.account?.profitloss ?? null;
-  const equity = balance !== null && accountPL !== null ? balance + accountPL : null;
+  // tastyfx's account strip (Funds/Profit-Loss/Margin/Available/Cash Rebate)
+  // never shows a separate "Equity" figure -- left blank rather than
+  // computed as Balance+AccountPL, since that's a derived number, not
+  // something actually read off the page.
+  const equity = null;
 
   const lines = [TASTYFX_HEADER.join(',')];
   for (const p of snapshot.positions || []) {
