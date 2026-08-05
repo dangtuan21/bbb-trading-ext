@@ -304,8 +304,10 @@ async function fnEnsurePanelAndGetBbox() {
 // ---- OCR text parsing (ported from _parse_ocr_positions) ----
 
 // e.g. "AUDUSD", "AUDUSD.pro", "EUR/USD" -- OCR sometimes drops the dot/
-// slash or misreads suffixes, so this is intentionally loose.
-const SYMBOL_RE = /\b([A-Z]{3})[./]?([A-Z]{3})\b/;
+// slash or misreads suffixes, so this is intentionally loose. Confirmed live
+// that OCR can also drop the leading letter entirely ("AUDUSD" -> "\UDUSD"),
+// hence 2-4 chars (not a strict 3) on the first group.
+const SYMBOL_RE = /\b([A-Z]{2,4})[./]?([A-Z]{3,4})\b/;
 const DIRECTION_RE = /\b(buy|sell)\b/i;
 const LOT_RE = /(\d+(?:\.\d+)?)\s*lot/i;
 // FX quotes (Entry/TP/SL) render with 4-5 decimal digits, e.g. "0.69460";
@@ -316,8 +318,20 @@ const LOT_RE = /(\d+(?:\.\d+)?)\s*lot/i;
 // ones (likely misread icon-area noise to the right of Net USD), which the
 // old "last decimal on the line = Net USD" rule grabbed instead of the
 // real 2-decimal Net USD value.
-const PRICE_RE = /-?\d+\.\d{4,5}\b/g;
+//
+// Confirmed live that OCR can also drop the decimal point entirely
+// ("0.69460" -> "069460") -- PRICE_TOKEN_RE matches both the normal
+// 4-5-decimal form AND a bare "0" + 5 digits form in one pass (preserving
+// left-to-right order across both), and normalizePriceToken() re-inserts
+// the decimal for the latter. Only covers sub-1.0 quotes (majors like
+// AUD/USD, EUR/USD) -- a decimal-dropped 3-digit quote (e.g. USD/JPY) isn't
+// disambiguated from a stray integer and isn't handled here.
+const PRICE_TOKEN_RE = /-?\d+\.\d{4,5}\b|\b0\d{5}\b/g;
 const MONEY_RE = /-?\d+\.\d{2}\b/g;
+
+function normalizePriceToken(token) {
+  return token.includes('.') ? token : `0.${token.slice(1)}`;
+}
 
 function parseOcrPositions(rawText) {
   const positions = [];
@@ -342,7 +356,7 @@ function parseOcrPositions(rawText) {
     // PRICE_RE/MONEY_RE above), not just taken in raw left-to-right order --
     // SL often renders as "--" (not set), so the price-token count varies.
     const afterDir = line.slice(dirMatch.index + dirMatch[0].length);
-    const prices = afterDir.match(PRICE_RE) || [];
+    const prices = (afterDir.match(PRICE_TOKEN_RE) || []).map(normalizePriceToken);
     const money = afterDir.match(MONEY_RE) || [];
     const opening = prices[0] || '';
     const takeProfit = prices[1] || '';

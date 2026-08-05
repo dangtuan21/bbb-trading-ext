@@ -25,6 +25,21 @@ function getWorker() {
   return workerPromise;
 }
 
+// Grayscale + invert -- this UI is dark-background/light-text, but
+// Tesseract's training data (and OCR engines generally) assume
+// light-background/dark-text; inverting dark-mode screenshots before OCR is
+// a standard, well-established technique, not a guess fitted to one sample.
+function preprocessForOcr(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const inverted = 255 - gray;
+    data[i] = data[i + 1] = data[i + 2] = inverted;
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
 // Crops the full-tab screenshot to `rect` (already in device pixels) and
 // upscales 2x in the same draw call -- matches the Python scraper's
 // crop-then-upscale approach, which was needed there because a full-viewport
@@ -32,11 +47,14 @@ function getWorker() {
 async function cropAndUpscale(dataUrl, rect) {
   const blob = await (await fetch(dataUrl)).blob();
   const bitmap = await createImageBitmap(blob);
-  const canvas = new OffscreenCanvas(rect.width * 2, rect.height * 2);
+  const width = rect.width * 2;
+  const height = rect.height * 2;
+  const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width * 2, rect.height * 2);
+  ctx.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height, 0, 0, width, height);
+  preprocessForOcr(ctx, width, height);
   return canvas.convertToBlob({ type: 'image/png' });
 }
 
