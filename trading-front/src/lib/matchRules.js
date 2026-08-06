@@ -12,7 +12,8 @@ import configData from "../data-fact/config.json"
  *       {
  *         "A-position": "A_Platform|A_AccountID|A_Symbol",
  *         "match-B-position": "B_Platform|B_AccountID|B_Symbol",
- *         "Stoploss-Takeprofit": [-100, 100]
+ *         "Stoploss-Takeprofit": [-100, 100],
+ *         "A-DailyDrawdown": -500
  *       },
  *       ...
  *     ],
@@ -54,7 +55,10 @@ export function parseMatchRules(json) {
     const stopLoss = Array.isArray(slTp) && typeof slTp[0] === "number" ? slTp[0] : null
     const takeProfit = Array.isArray(slTp) && typeof slTp[1] === "number" ? slTp[1] : null
 
-    rules.push({ aPlatform, aAccountId, aSymbol, bPlatform, bAccountId, bSymbol, stopLoss, takeProfit })
+    const dd = entry?.["A-DailyDrawdown"]
+    const dailyDrawdown = typeof dd === "number" ? dd : null
+
+    rules.push({ aPlatform, aAccountId, aSymbol, bPlatform, bAccountId, bSymbol, stopLoss, takeProfit, dailyDrawdown })
   }
   return rules
 }

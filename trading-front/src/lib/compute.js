@@ -139,8 +139,9 @@ export function computeMainView(rows, matchRules = []) {
     }))
 
   // ruleMap key: "A_Platform|A_AccountID|A_Symbol" (normalized) ->
-  // { platform, accountId, symbol, stopLoss, takeProfit } of the right-side
-  // row it should pair with, plus that rule's configured SL/TP.
+  // { platform, accountId, symbol, stopLoss, takeProfit, dailyDrawdown } of
+  // the right-side row it should pair with, plus that rule's configured
+  // SL/TP/DD.
   //
   // ruleMapByAccount is the same targets keyed only by "A_Platform|
   // A_AccountID" (one entry per account, since config.json never defines
@@ -158,6 +159,7 @@ export function computeMainView(rows, matchRules = []) {
       symbol: normSymbol(rule.bSymbol),
       stopLoss: rule.stopLoss ?? null,
       takeProfit: rule.takeProfit ?? null,
+      dailyDrawdown: rule.dailyDrawdown ?? null,
     }
     ruleMap.set(`${rule.aPlatform}|${rule.aAccountId}|${normSymbol(rule.aSymbol)}`, target)
     ruleMapByAccount.set(`${rule.aPlatform}|${rule.aAccountId}`, target)
@@ -221,6 +223,7 @@ export function computeMainView(rows, matchRules = []) {
       A_Symbol: l.Symbol,
       A_Direction: l.Direction,
       A_TotalSize: l.TotalSize,
+      A_DD: ruleTarget && ruleTarget.dailyDrawdown !== null ? ruleTarget.dailyDrawdown : "",
       A_PositionPL: l.PositionPL,
       SL: ruleTarget && ruleTarget.stopLoss !== null ? ruleTarget.stopLoss : "",
       TP: ruleTarget && ruleTarget.takeProfit !== null ? ruleTarget.takeProfit : "",
