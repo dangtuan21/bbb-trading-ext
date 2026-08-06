@@ -8,7 +8,8 @@
 // screenshot of the rendered tab and runs OCR (Tesseract.js, in the
 // offscreen document -- see offscreen.js) instead of reading DOM text like
 // every other platform here. Account-level info (Demo/Live, account ID,
-// balance, leverage) IS real DOM text and is read normally.
+// balance, leverage, and the Balance/Equity/Margin status strip below the
+// grid) IS real DOM text and is read normally.
 //
 // Runs in a dedicated (unfocused) browser window, same rationale as
 // RebelsFunding: needs real screen space to render into (this UI's panel
@@ -148,6 +149,51 @@ async function fnEnsureReadyAndGetAccountInfo() {
   } catch (err) {
     return { ok: false, reason: 'exception', message: String((err && err.message) || err), stack: err && err.stack };
   }
+}
+
+// Reads the "Balance / Equity / Margin / Free margin / ..." status strip
+// that sits below the Positions grid, once the Trade Watch panel is open.
+// Unlike the grid rows (canvas-rendered, no DOM text -- see the OCR flow
+// below), this strip is plain text, so it's read the same shadow-DOM-aware
+// way as the top account-info bar in fnEnsureReadyAndGetAccountInfo instead
+// of relying on OCR of the screenshot to separate it from Balance.
+async function fnReadFooterEquity() {
+  function deepLines() {
+    const out = [];
+    function walk(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+        if (t) out.push(t);
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const tag = node.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return;
+      let style;
+      try { style = window.getComputedStyle(node); } catch { style = null; }
+      if (style && (style.display === 'none' || style.visibility === 'hidden')) return;
+      if (node.shadowRoot) {
+        for (const child of node.shadowRoot.childNodes) walk(child);
+      }
+      for (const child of node.childNodes) walk(child);
+    }
+    walk(document.body);
+    return out;
+  }
+
+  const lines = deepLines();
+  // Handles both "Equity: USD 10 800.16" as a single text node and "Equity"
+  // / "USD 10 800.16" split across two, same as the top balance line uses
+  // U+00A0 as both the currency separator and thousands separator.
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^Equity:?\s*(.*)$/i.exec(lines[i]);
+    if (!m) continue;
+    const raw = m[1] || lines[i + 1] || '';
+    if (!raw) continue;
+    const equity = raw.replace('USD', '').replace(/ /g, '').replace(/,/g, '').trim();
+    if (equity) return { ok: true, equity };
+  }
+  return { ok: false, equity: '', diag: { linesSample: lines.slice(0, 40) } };
 }
 
 // Opens the "Trade Watch (bottom)" panel (off by default on a fresh
@@ -420,6 +466,14 @@ async function runFullScan() {
       diag = { reason: 'bbox-not-found', detail: bboxResult };
     }
 
+    // Only attempt this once the panel's confirmed open (bboxResult.ok) --
+    // the footer strip isn't rendered otherwise.
+    let equity = '';
+    if (bboxResult?.ok) {
+      const equityResult = await execInTab(tabId, fnReadFooterEquity);
+      if (equityResult?.ok) equity = equityResult.equity;
+    }
+
     const base = {
       SnapshotDate: fmtDate(new Date()),
       Platform: 'AlphaCapital',
@@ -427,10 +481,7 @@ async function runFullScan() {
       AccountLabel: accountInfo.leverage ? `Leverage ${accountInfo.leverage}` : '',
       IsRealMoney: accountInfo.isRealMoney,
       Balance: accountInfo.balance,
-      // OCR doesn't reliably separate a real Equity figure from Balance --
-      // left blank rather than assumed equal to Balance, since that's not
-      // an actual read value either.
-      Equity: '',
+      Equity: equity,
       AccountPL: '',
     };
 
