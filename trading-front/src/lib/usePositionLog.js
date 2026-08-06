@@ -2,15 +2,9 @@ import { useEffect, useState } from "react"
 import Papa from "papaparse"
 import { POSITIONLOG_FIELDS } from "./schema"
 
-// Each platform's local server (ext-server) mirrors its own CSV here --
-// merged client-side rather than server-side so one platform's write can
-// never clobber another's (see ext-server/server.js's mirrorToFrontend).
-const SOURCES = [
-  { platform: "tastyfx", url: `${import.meta.env.BASE_URL}data/tastyfx.csv` },
-  { platform: "rebelsfunding", url: `${import.meta.env.BASE_URL}data/rebelsfunding.csv` },
-  { platform: "ftmo", url: `${import.meta.env.BASE_URL}data/ftmo.csv` },
-  { platform: "alphacapital", url: `${import.meta.env.BASE_URL}data/alphacapital.csv` },
-]
+// ext-server merges every platform's rows into one combined CSV (see
+// server.js's platformRows cache + writeCombined) and mirrors it here.
+const POSITIONS_URL = `${import.meta.env.BASE_URL}data/positions.csv`
 
 function cleanRow(row) {
   const out = {}
@@ -20,14 +14,13 @@ function cleanRow(row) {
   return out
 }
 
-async function loadSource({ url }) {
-  const res = await fetch(url)
+async function loadPositions() {
+  const res = await fetch(POSITIONS_URL)
   if (!res.ok) {
-    // Missing file (e.g. that extension hasn't written yet) is a normal
-    // state, not an error -- it just contributes 0 rows rather than
-    // blocking the whole page.
+    // Missing file (e.g. no extension has written yet) is a normal state,
+    // not an error -- it just means 0 rows rather than blocking the page.
     if (res.status === 404) return { rows: [], lastModified: null }
-    throw new Error(`Could not load ${url} (${res.status})`)
+    throw new Error(`Could not load ${POSITIONS_URL} (${res.status})`)
   }
   // When the CSV file itself was last written by the extension's server
   // (not when this tab happened to fetch it) -- read off the HTTP
@@ -41,9 +34,10 @@ async function loadSource({ url }) {
 }
 
 /**
- * Loads and merges PositionLog rows from every platform's mirrored CSV (see
- * SOURCES above). `updatedAt` reflects whichever source was written most
- * recently, so the header always shows the freshest data's age.
+ * Loads PositionLog rows from the combined positions.csv. `updatedAt`
+ * reflects the file's Last-Modified header, i.e. whenever ext-server last
+ * wrote it (from any platform), so the header always shows the freshest
+ * data's age.
  */
 export function usePositionLog() {
   const [rows, setRows] = useState([])
@@ -54,14 +48,11 @@ export function usePositionLog() {
   useEffect(() => {
     let cancelled = false
 
-    Promise.all(SOURCES.map(loadSource))
-      .then((results) => {
+    loadPositions()
+      .then(({ rows, lastModified }) => {
         if (cancelled) return
-        const allRows = results.flatMap((r) => r.rows)
-        const times = results.map((r) => r.lastModified).filter(Boolean)
-        const latest = times.length ? new Date(Math.max(...times.map((d) => d.getTime()))) : new Date()
-        setRows(allRows)
-        setUpdatedAt(latest)
+        setRows(rows)
+        setUpdatedAt(lastModified ?? new Date())
         setStatus("ready")
       })
       .catch((err) => {

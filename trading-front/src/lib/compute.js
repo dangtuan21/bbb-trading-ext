@@ -141,16 +141,26 @@ export function computeMainView(rows, matchRules = []) {
   // ruleMap key: "A_Platform|A_AccountID|A_Symbol" (normalized) ->
   // { platform, accountId, symbol, stopLoss, takeProfit } of the right-side
   // row it should pair with, plus that rule's configured SL/TP.
+  //
+  // ruleMapByAccount is the same targets keyed only by "A_Platform|
+  // A_AccountID" (one entry per account, since config.json never defines
+  // two rules for the same account) -- the fallback used when the account
+  // currently has zero open positions, so its Symbol is "n/a" and the
+  // symbol-keyed lookup below can't match anything. Without this, an
+  // account with no open trades would lose its configured SL/TP entirely
+  // just because there's nothing open to match a symbol against.
   const ruleMap = new Map()
+  const ruleMapByAccount = new Map()
   for (const rule of matchRules) {
-    const key = `${rule.aPlatform}|${rule.aAccountId}|${normSymbol(rule.aSymbol)}`
-    ruleMap.set(key, {
+    const target = {
       platform: rule.bPlatform,
       accountId: rule.bAccountId,
       symbol: normSymbol(rule.bSymbol),
       stopLoss: rule.stopLoss ?? null,
       takeProfit: rule.takeProfit ?? null,
-    })
+    }
+    ruleMap.set(`${rule.aPlatform}|${rule.aAccountId}|${normSymbol(rule.aSymbol)}`, target)
+    ruleMapByAccount.set(`${rule.aPlatform}|${rule.aAccountId}`, target)
   }
 
   // Row-level join: for each left row and each Symbol it holds (a left
@@ -180,6 +190,25 @@ export function computeMainView(rows, matchRules = []) {
       if (r) {
         ruleTarget = target
         break
+      }
+    }
+
+    // No open position matched a rule (most often because the account has
+    // no open positions at all) -- fall back to the account's rule so SL/TP
+    // still show, and still try the B-side pairing off the rule's own
+    // symbol.
+    if (!ruleTarget) {
+      const fallback = ruleMapByAccount.get(`${l.Platform}|${l.AccountID}`)
+      if (fallback) {
+        ruleTarget = fallback
+        if (fallback.platform) {
+          r = right.find(
+            (rr) =>
+              rr.Platform === fallback.platform &&
+              rr.AccountID === fallback.accountId &&
+              normSymbol(rr.Symbol) === fallback.symbol
+          )
+        }
       }
     }
     joined.push({

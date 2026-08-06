@@ -1,7 +1,10 @@
 // Zero-dependency local server shared by the TastyFX, RebelsFunding, FTMO,
 // and AlphaCapital Positions Tracker extensions. One process, one port, one
-// endpoint -- POST /write with a "platform" field routes to the right CSV
-// builder/file. Binds to 127.0.0.1 only -- not reachable from the network.
+// endpoint -- POST /write with a "platform" field routes to the right row
+// builder, and every platform's rows are merged into a single positions.csv
+// (not one file per platform) since each POST only ever carries one
+// platform's snapshot, the server keeps every platform's last-known rows in
+// memory and rewrites the combined file in full on each write.
 
 const http = require('http');
 const fs = require('fs');
@@ -16,7 +19,23 @@ const PLATFORM = Object.freeze({
   ALPHACAPITAL: 'alphacapital',
 });
 
+// Order rows appear in the combined file -- stable regardless of which
+// platform wrote most recently.
+const PLATFORM_ORDER = [PLATFORM.TASTYFX, PLATFORM.REBELSFUNDING, PLATFORM.FTMO, PLATFORM.ALPHACAPITAL];
+
+// Maps the CSV's "Platform" column value (what each platform actually
+// writes into its rows) back to the internal platform key above, so rows
+// read back from disk at startup can be sorted into the right cache bucket.
+const PLATFORM_KEY_BY_DISPLAY = {
+  tastyfx: PLATFORM.TASTYFX,
+  RebelsFunding: PLATFORM.REBELSFUNDING,
+  FTMO: PLATFORM.FTMO,
+  AlphaCapital: PLATFORM.ALPHACAPITAL,
+};
+
+const POSITIONS_FILE = path.join(__dirname, 'positions.csv');
 const FRONTEND_DATA_DIR = path.join(__dirname, '..', 'trading-front', 'public', 'data');
+const POSITIONS_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'positions.csv');
 
 function csvField(value) {
   const str = value === null || value === undefined ? '' : String(value);
@@ -34,14 +53,16 @@ function fmt2(n) {
   return typeof n === 'number' ? n.toFixed(2) : n;
 }
 
-const TASTYFX_HEADER = [
-  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel',
+// Union of every platform's columns. tastyfx doesn't have a concept of
+// IsRealMoney -- its rows just leave that field blank.
+const HEADER = [
+  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
   'PosID', 'Symbol', 'Direction', 'Size', 'SizeUnit',
   'Opening', 'Latest', 'StopLoss', 'TakeProfit', 'PositionPL',
 ];
 
-function buildTastyfxCsv({ snapshot, accountId, accountLabel }) {
+function buildTastyfxRows({ snapshot, accountId, accountLabel }) {
   const snapshotDate = fmtDate(snapshot.timestamp);
   const balance = snapshot.account?.funds ?? null;
   const accountPL = snapshot.account?.profitloss ?? null;
@@ -51,84 +72,144 @@ function buildTastyfxCsv({ snapshot, accountId, accountLabel }) {
   // something actually read off the page.
   const equity = null;
 
-  const lines = [TASTYFX_HEADER.join(',')];
-  for (const p of snapshot.positions || []) {
-    const row = [
-      snapshotDate, PLATFORM.TASTYFX, accountId, accountLabel,
-      fmt2(balance), fmt2(equity), fmt2(accountPL),
-      'n/a', p.market, p.size >= 0 ? 'Buy' : 'Sell', Math.abs(p.size), 'lot',
-      p.opening, p.latest,
-      p.stopLoss === null ? 'none' : p.stopLoss,
-      p.takeProfit === null ? 'none' : p.takeProfit,
-      fmt2(p.profitLossUsd),
-    ];
-    lines.push(row.map(csvField).join(','));
-  }
-  return lines.join('\n') + '\n';
+  return (snapshot.positions || []).map((p) => ({
+    SnapshotDate: snapshotDate,
+    Platform: PLATFORM.TASTYFX,
+    AccountID: accountId,
+    AccountLabel: accountLabel,
+    IsRealMoney: '',
+    Balance: fmt2(balance),
+    Equity: fmt2(equity),
+    AccountPL: fmt2(accountPL),
+    PosID: 'n/a',
+    Symbol: p.market,
+    Direction: p.size >= 0 ? 'Buy' : 'Sell',
+    Size: Math.abs(p.size),
+    SizeUnit: 'lot',
+    Opening: p.opening,
+    Latest: p.latest,
+    StopLoss: p.stopLoss === null ? 'none' : p.stopLoss,
+    TakeProfit: p.takeProfit === null ? 'none' : p.takeProfit,
+    PositionPL: fmt2(p.profitLossUsd),
+  }));
 }
 
 // Shared by RebelsFunding, FTMO, and AlphaCapital -- all send an
 // already-shaped array of rows (the extension does all scraping/shaping
 // itself), unlike tastyfx which sends a raw snapshot this server transforms.
-const ROWS_HEADER = [
-  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
-  'Balance', 'Equity', 'AccountPL',
-  'PosID', 'Symbol', 'Direction', 'Size', 'SizeUnit',
-  'Opening', 'Latest', 'StopLoss', 'TakeProfit', 'PositionPL',
-];
-
-function buildRowsCsv({ rows }) {
+function buildPassthroughRows({ rows }) {
   if (!Array.isArray(rows)) throw new Error('rows must be an array');
-  const lines = [ROWS_HEADER.join(',')];
-  for (const row of rows) {
-    lines.push(ROWS_HEADER.map((key) => csvField(row[key])).join(','));
+  return rows;
+}
+
+// One entry per platform: how to build its rows from the POSTed payload, and
+// how to count them for the log line / response.
+const PLATFORM_CONFIG = {
+  [PLATFORM.TASTYFX]: {
+    build: buildTastyfxRows,
+    countRows: (payload) => payload.snapshot.positions?.length ?? 0,
+  },
+  [PLATFORM.REBELSFUNDING]: {
+    build: buildPassthroughRows,
+    countRows: (payload) => payload.rows.length,
+  },
+  [PLATFORM.FTMO]: {
+    build: buildPassthroughRows,
+    countRows: (payload) => payload.rows.length,
+  },
+  [PLATFORM.ALPHACAPITAL]: {
+    build: buildPassthroughRows,
+    countRows: (payload) => payload.rows.length,
+  },
+};
+
+// In-memory cache of each platform's last-known rows -- a POST only ever
+// carries one platform's snapshot, so this is what lets the combined file
+// keep every other platform's rows intact across writes.
+const platformRows = {
+  [PLATFORM.TASTYFX]: [],
+  [PLATFORM.REBELSFUNDING]: [],
+  [PLATFORM.FTMO]: [],
+  [PLATFORM.ALPHACAPITAL]: [],
+};
+
+// Minimal CSV parsing (quoted fields, escaped quotes, no embedded newlines
+// inside a field beyond what csvField above ever produces) -- just enough to
+// read positions.csv back on startup, since this server stays
+// zero-dependency rather than pulling in a CSV library for one read.
+function parseCsvLine(line) {
+  const fields = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"' && line[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (c === '"') {
+        inQuotes = false;
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      fields.push(field);
+      field = '';
+    } else {
+      field += c;
+    }
+  }
+  fields.push(field);
+  return fields;
+}
+
+function loadExistingPositions() {
+  let text;
+  try {
+    text = fs.readFileSync(POSITIONS_FILE, 'utf8');
+  } catch {
+    return;
+  }
+  const lines = text.split('\n').filter((l) => l.length > 0);
+  if (lines.length === 0) return;
+  const header = parseCsvLine(lines[0]);
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    const row = {};
+    header.forEach((key, idx) => { row[key] = fields[idx] ?? ''; });
+    const platformKey = PLATFORM_KEY_BY_DISPLAY[row.Platform];
+    if (platformKey) platformRows[platformKey].push(row);
+  }
+}
+
+function buildCombinedCsv() {
+  const lines = [HEADER.join(',')];
+  for (const platformKey of PLATFORM_ORDER) {
+    for (const row of platformRows[platformKey]) {
+      lines.push(HEADER.map((key) => csvField(row[key])).join(','));
+    }
   }
   return lines.join('\n') + '\n';
 }
 
-// One entry per platform: where its CSV lives, where it mirrors to for
-// trading-front, how to build the CSV from the POSTed payload, and how to
-// count rows for the log line / response.
-const PLATFORM_CONFIG = {
-  [PLATFORM.TASTYFX]: {
-    file: path.join(__dirname, 'tastyfx-positions.csv'),
-    mirrorFile: path.join(FRONTEND_DATA_DIR, 'tastyfx.csv'),
-    build: buildTastyfxCsv,
-    countRows: (payload) => payload.snapshot.positions?.length ?? 0,
-  },
-  [PLATFORM.REBELSFUNDING]: {
-    file: path.join(__dirname, 'rebelsfunding-positions.csv'),
-    mirrorFile: path.join(FRONTEND_DATA_DIR, 'rebelsfunding.csv'),
-    build: buildRowsCsv,
-    countRows: (payload) => payload.rows.length,
-  },
-  [PLATFORM.FTMO]: {
-    file: path.join(__dirname, 'ftmo-positions.csv'),
-    mirrorFile: path.join(FRONTEND_DATA_DIR, 'ftmo.csv'),
-    build: buildRowsCsv,
-    countRows: (payload) => payload.rows.length,
-  },
-  [PLATFORM.ALPHACAPITAL]: {
-    file: path.join(__dirname, 'alphacapital-positions.csv'),
-    mirrorFile: path.join(FRONTEND_DATA_DIR, 'alphacapital.csv'),
-    build: buildRowsCsv,
-    countRows: (payload) => payload.rows.length,
-  },
-};
+function writeCombined() {
+  const csv = buildCombinedCsv();
+  fs.writeFileSync(POSITIONS_FILE, csv);
+  try {
+    fs.mkdirSync(path.dirname(POSITIONS_MIRROR_FILE), { recursive: true });
+    fs.writeFileSync(POSITIONS_MIRROR_FILE, csv);
+  } catch (err) {
+    console.warn('Could not mirror to trading-front:', err.message);
+  }
+}
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
-function mirrorToFrontend(file, csv) {
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, csv);
-  } catch (err) {
-    console.warn('Could not mirror to trading-front:', err.message);
-  }
 }
 
 function fileStatus(file) {
@@ -138,6 +219,8 @@ function fileStatus(file) {
     return { lastWriteTime: null, file };
   }
 }
+
+loadExistingPositions();
 
 const server = http.createServer((req, res) => {
   setCors(res);
@@ -149,9 +232,9 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/status') {
-    const status = { ok: true };
-    for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
-      status[platform] = fileStatus(config.file);
+    const status = { ok: true, positions: fileStatus(POSITIONS_FILE) };
+    for (const platformKey of PLATFORM_ORDER) {
+      status[platformKey] = { rows: platformRows[platformKey].length };
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(status));
@@ -167,9 +250,8 @@ const server = http.createServer((req, res) => {
         const config = PLATFORM_CONFIG[payload.platform];
         if (!config) throw new Error(`Unknown platform: ${payload.platform}`);
 
-        const csv = config.build(payload);
-        fs.writeFileSync(config.file, csv);
-        mirrorToFrontend(config.mirrorFile, csv);
+        platformRows[payload.platform] = config.build(payload);
+        writeCombined();
         const count = config.countRows(payload);
         console.log(`[${new Date().toISOString()}] ${payload.platform}: wrote ${count} row(s)`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -189,7 +271,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Trading Positions Tracker server listening on http://127.0.0.1:${PORT}`);
-  for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
-    console.log(`  ${platform} -> ${config.file}`);
-  }
+  console.log(`  positions -> ${POSITIONS_FILE}`);
 });

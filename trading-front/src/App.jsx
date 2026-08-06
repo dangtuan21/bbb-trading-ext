@@ -61,13 +61,13 @@ export default function App() {
           <h2 className="text-xl font-semibold text-slate-800">{titleFor(active)}</h2>
           {status === "ready" && (
             <span className="text-xs text-slate-400">
-              {rows.length} row{rows.length === 1 ? "" : "s"} · {relativeUpdatedAt ?? "data/*.csv"}
+              {rows.length} row{rows.length === 1 ? "" : "s"} · {relativeUpdatedAt ?? "data/positions.csv"}
             </span>
           )}
         </header>
 
         {status === "loading" && (
-          <p className="text-sm text-slate-400">Loading tastyfx.csv + rebelsfunding.csv...</p>
+          <p className="text-sm text-slate-400">Loading positions.csv...</p>
         )}
 
         {status === "error" && (

@@ -29,8 +29,7 @@
             "Stoploss-Takeprofit": [-1000, 500]
         },
         {
-            "A-position": "FTMO|650005965|AUD/USD",
-            "match-B-position": "tastyfx|DTEN3|AUD/USD",
+            "A-position": "FTMO|650005965|AUD/CHF",
             "Stoploss-Takeprofit": [-1000, 800]
         },
         {

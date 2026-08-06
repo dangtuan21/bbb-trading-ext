@@ -1,7 +1,7 @@
-// Union of the CSVs ext-server/server.js produces, merged client-side in
-// usePositionLog.js -- keep in sync if any platform's schema changes.
-// IsRealMoney is deliberately not listed here even though the underlying
-// CSVs still have it -- not displayed in the dashboard.
+// Columns of the combined positions.csv ext-server/server.js produces --
+// keep in sync if any platform's schema changes. IsRealMoney is deliberately
+// not listed here even though the underlying CSV still has it -- not
+// displayed in the dashboard.
 export const POSITIONLOG_FIELDS = [
   "SnapshotDate",
   "Platform",
