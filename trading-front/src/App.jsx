@@ -45,7 +45,7 @@ const MAINVIEW_COLUMNS = [
 ]
 
 export default function App() {
-  const [active, setActive] = useState("positionlog")
+  const [active, setActive] = useState("mainview")
   const { rows, status, error, updatedAt } = usePositionLog()
   const relativeUpdatedAt = useRelativeTime(updatedAt)
 
