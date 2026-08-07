@@ -138,20 +138,34 @@ export function computeMainView(rows, matchRules = []) {
       SymbolPL: r.SymbolPL,
     }))
 
-  // ruleMap key: "A_Platform|A_AccountID|A_Symbol" (normalized) ->
-  // { platform, accountId, symbol, stopLoss, takeProfit, dailyDrawdown } of
-  // the right-side row it should pair with, plus that rule's configured
-  // SL/TP/DD.
+  // ruleMap key: "A_Platform|A_AccountID|A_Symbol" (normalized) -> target,
+  // built only from rules that name a specific symbol. target carries
+  // { platform, accountId, symbol, stopLoss, takeProfit, dailyDrawdown,
+  // aSymbol } for the right-side row it should pair with, plus that rule's
+  // configured SL/TP/DD -- aSymbol is the rule's own (un-normalized) A-side
+  // symbol, threaded through so the edit UI can tell which existing rule it
+  // would be replacing.
   //
-  // ruleMapByAccount is the same targets keyed only by "A_Platform|
-  // A_AccountID" (one entry per account, since config.json never defines
-  // two rules for the same account) -- the fallback used when the account
-  // currently has zero open positions, so its Symbol is "n/a" and the
-  // symbol-keyed lookup below can't match anything. Without this, an
-  // account with no open trades would lose its configured SL/TP entirely
-  // just because there's nothing open to match a symbol against.
+  // ruleMapByAccount key: "A_Platform|A_AccountID" -> target, built only
+  // from blanket rules (no A-side symbol) -- the first fallback used when no
+  // symbol-specific rule matches, most often because the account currently
+  // has zero open positions (Symbol is "n/a", so the symbol-keyed lookup
+  // below can't match anything). Only built from blanket rules, not "every
+  // rule, last one wins" -- otherwise a symbol-specific rule for the same
+  // account would incorrectly leak into this fallback slot too, now that
+  // both kinds of rule can coexist for one account.
+  //
+  // rulesByAccount key: same, but -> ALL of that account's rules (blanket or
+  // specific). Used as a second, last-resort fallback: an account with no
+  // blanket rule whose only rule happens to be symbol-specific would
+  // otherwise lose that rule entirely the moment its matching position
+  // closes (Symbol goes to "n/a", so even the symbol-keyed lookup below
+  // can't fire) -- if it's the account's ONLY rule, unambiguous, show it
+  // anyway rather than hide a configured rule just because nothing's open
+  // right now.
   const ruleMap = new Map()
   const ruleMapByAccount = new Map()
+  const rulesByAccount = new Map()
   for (const rule of matchRules) {
     const target = {
       platform: rule.bPlatform,
@@ -160,9 +174,16 @@ export function computeMainView(rows, matchRules = []) {
       stopLoss: rule.stopLoss ?? null,
       takeProfit: rule.takeProfit ?? null,
       dailyDrawdown: rule.dailyDrawdown ?? null,
+      aSymbol: rule.aSymbol ?? null,
     }
-    ruleMap.set(`${rule.aPlatform}|${rule.aAccountId}|${normSymbol(rule.aSymbol)}`, target)
-    ruleMapByAccount.set(`${rule.aPlatform}|${rule.aAccountId}`, target)
+    const accountKey = `${rule.aPlatform}|${rule.aAccountId}`
+    if (rule.aSymbol) {
+      ruleMap.set(`${accountKey}|${normSymbol(rule.aSymbol)}`, target)
+    } else {
+      ruleMapByAccount.set(accountKey, target)
+    }
+    if (!rulesByAccount.has(accountKey)) rulesByAccount.set(accountKey, [])
+    rulesByAccount.get(accountKey).push(target)
   }
 
   // Row-level join: for each left row and each Symbol it holds (a left
@@ -196,11 +217,19 @@ export function computeMainView(rows, matchRules = []) {
     }
 
     // No open position matched a rule (most often because the account has
-    // no open positions at all) -- fall back to the account's rule so SL/TP
-    // still show, and still try the B-side pairing off the rule's own
-    // symbol.
+    // no open positions at all) -- fall back to the account's blanket rule
+    // so SL/TP still show, and still try the B-side pairing off the rule's
+    // own symbol.
     if (!ruleTarget) {
-      const fallback = ruleMapByAccount.get(`${l.Platform}|${l.AccountID}`)
+      const accountKey = `${l.Platform}|${l.AccountID}`
+      let fallback = ruleMapByAccount.get(accountKey)
+      // Still nothing: if this account's only configured rule is
+      // symbol-specific (no blanket rule to fall back to), show it anyway
+      // rather than hide a real rule just because it's not currently open.
+      if (!fallback) {
+        const accountRules = rulesByAccount.get(accountKey)
+        if (accountRules && accountRules.length === 1) fallback = accountRules[0]
+      }
       if (fallback) {
         ruleTarget = fallback
         if (fallback.platform) {
@@ -237,6 +266,15 @@ export function computeMainView(rows, matchRules = []) {
       B_Direction: r ? r.Direction : "",
       B_TotalSize: r ? r.TotalSize : "",
       B_SymbolPL: r ? r.SymbolPL : "",
+      // Not rendered as a table column -- consumed by the edit form to know
+      // which existing rule (symbol-specific, blanket, or none) it would be
+      // replacing on save. `null` means a blanket rule matched (or none did
+      // -- see hasRule); `undefined` is never stored, only used as "absent"
+      // when read from a plain object without this key.
+      _rule: ruleTarget
+        ? { aSymbol: ruleTarget.aSymbol, bPlatform: ruleTarget.platform, bAccountId: ruleTarget.accountId, bSymbol: ruleTarget.symbol }
+        : null,
+      _openSymbols: leftSymbols,
     })
   }
 

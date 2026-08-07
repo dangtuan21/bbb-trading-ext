@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import Sidebar from "./components/Sidebar"
 import DataTable from "./components/DataTable"
+import RuleEditForm from "./components/RuleEditForm"
 import { usePositionLog } from "./lib/usePositionLog"
 import { useRelativeTime } from "./lib/relativeTime"
 import { computeAccountLog, computeMainView } from "./lib/compute"
@@ -50,6 +51,24 @@ export default function App() {
   const accountLogRows = useMemo(() => computeAccountLog(rows), [rows])
   const mainView = useMemo(() => computeMainView(rows, matchRules), [rows])
 
+  // Options for RuleEditForm's B-position dropdown -- every currently-known
+  // non-A-side Platform+AccountID+Symbol, deduped (an account can carry
+  // multiple open positions, i.e. multiple AccountLog rows sharing an
+  // AccountID with different Symbols).
+  const bOptions = useMemo(() => {
+    const seen = new Set()
+    const options = []
+    for (const r of mainView.right) {
+      const key = `${r.Platform}|${r.AccountID}|${r.Symbol}`
+      if (seen.has(key) || r.Symbol === "n/a") continue
+      seen.add(key)
+      options.push({ platform: r.Platform, accountId: r.AccountID, symbol: r.Symbol })
+    }
+    return options
+  }, [mainView.right])
+
+  const [editingRow, setEditingRow] = useState(null)
+
   return (
     <div className="flex h-screen w-screen bg-slate-100">
       <Sidebar active={active} onSelect={setActive} />
@@ -79,6 +98,7 @@ export default function App() {
             columns={MAINVIEW_COLUMNS}
             rows={mainView.joined}
             emptyMessage="No RebelsFunding, FTMO, or AlphaCapital accounts in this snapshot yet."
+            onRowClick={setEditingRow}
           />
         )}
 
@@ -90,6 +110,15 @@ export default function App() {
           <DataTable columns={ACCOUNTLOG_COLUMNS} rows={accountLogRows} />
         )}
       </main>
+
+      {editingRow && (
+        <RuleEditForm
+          row={editingRow}
+          bOptions={bOptions}
+          onClose={() => setEditingRow(null)}
+          onSaved={() => setEditingRow(null)}
+        />
+      )}
     </div>
   )
 }

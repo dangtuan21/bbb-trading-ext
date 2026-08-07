@@ -25,6 +25,13 @@ import configData from "../data-fact/config.json"
  * (B_ columns stay blank in MainView, same as an unmatched rule), while
  * still carrying its SL/TP through to that A-side row.
  *
+ * "A-position"'s Symbol segment is optional too -- "A_Platform|A_AccountID"
+ * (2 fields) is a blanket rule that applies to the account regardless of
+ * which symbol it's trading; "A_Platform|A_AccountID|A_Symbol" (3 fields)
+ * only applies to that specific symbol and takes precedence over a blanket
+ * rule for the same account (see computeMainView's ruleMap vs
+ * ruleMapByAccount). aSymbol is null for a blanket rule.
+ *
  * "schedule-interval" isn't consumed here.
  */
 export function parseMatchRules(json) {
@@ -36,9 +43,9 @@ export function parseMatchRules(json) {
     const aPart = entry?.["A-position"]
     if (typeof aPart !== "string") continue
 
-    const aFields = aPart.split("|")
-    if (aFields.length !== 3) continue
-    const [aPlatform, aAccountId, aSymbol] = aFields.map((s) => s.trim())
+    const aFields = aPart.split("|").map((s) => s.trim())
+    if (aFields.length !== 2 && aFields.length !== 3) continue
+    const [aPlatform, aAccountId, aSymbol = null] = aFields
 
     let bPlatform = null
     let bAccountId = null

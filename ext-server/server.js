@@ -37,6 +37,15 @@ const POSITIONS_FILE = path.join(__dirname, 'positions.csv');
 const FRONTEND_DATA_DIR = path.join(__dirname, '..', 'trading-front', 'public', 'data');
 const POSITIONS_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'positions.csv');
 
+// Written directly (not mirrored) -- unlike positions.csv this IS the
+// checked-in source file trading-front's matchRules.js imports at build
+// time, so MainView's rule-editing UI (see App.jsx) intentionally leaves an
+// edit trail in `git diff` instead of living in a gitignored runtime copy.
+// Vite's own dev-server file watcher picks up the on-disk change and
+// reloads the page -- no separate fetch/mirror path needed for the frontend
+// to see it.
+const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-front', 'src', 'data-fact', 'config.json');
+
 function csvField(value) {
   const str = value === null || value === undefined ? '' : String(value);
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
@@ -206,6 +215,80 @@ function writeCombined() {
   }
 }
 
+// Finds the index of the position-rule entry matching a given A-side
+// Platform+AccountID+symbol, where symbol === null means "the blanket rule
+// for this account" (an "A-position" with no third segment) rather than
+// "any rule for this account" -- a symbol-specific and a blanket rule can
+// coexist for the same account, so this must distinguish them exactly the
+// same way trading-front's matchRules.js parses "A-position".
+function findRuleIndex(rules, platform, accountId, symbol) {
+  return rules.findIndex((entry) => {
+    const parts = String(entry?.['A-position'] || '').split('|').map((s) => s.trim());
+    if (parts.length !== 2 && parts.length !== 3) return false;
+    if (parts[0] !== platform || parts[1] !== accountId) return false;
+    const entrySymbol = parts.length === 3 && parts[2] ? parts[2] : null;
+    return entrySymbol === symbol;
+  });
+}
+
+// Builds/replaces one position-rule entry from a MainView edit and writes
+// the config file back in place. `originalASymbol` (string | null |
+// undefined) identifies which existing entry this edit replaces: a string
+// or null means "replace the entry with this exact A-side symbol (null =
+// blanket)"; omitting the field entirely means "no existing entry -- this
+// is a brand new rule, just append it."
+function applyRuleEdit(payload) {
+  const raw = fs.readFileSync(MATCH_RULES_CONFIG_FILE, 'utf8');
+  const configJson = JSON.parse(raw);
+  if (!Array.isArray(configJson['position-rule'])) configJson['position-rule'] = [];
+  const rules = configJson['position-rule'];
+
+  const aSymbol = payload.aSymbol || null;
+  const aPosition = aSymbol
+    ? `${payload.aPlatform}|${payload.aAccountId}|${aSymbol}`
+    : `${payload.aPlatform}|${payload.aAccountId}`;
+
+  const entry = { 'A-position': aPosition };
+  if (payload.bPlatform && payload.bAccountId && payload.bSymbol) {
+    entry['match-B-position'] = `${payload.bPlatform}|${payload.bAccountId}|${payload.bSymbol}`;
+  }
+  if (typeof payload.stopLoss === 'number' || typeof payload.takeProfit === 'number') {
+    entry['Stoploss-Takeprofit'] = [
+      typeof payload.stopLoss === 'number' ? payload.stopLoss : null,
+      typeof payload.takeProfit === 'number' ? payload.takeProfit : null,
+    ];
+  }
+  if (typeof payload.dailyDrawdown === 'number') {
+    entry['A-DailyDrawdown'] = payload.dailyDrawdown;
+  }
+
+  const hasOriginal = Object.prototype.hasOwnProperty.call(payload, 'originalASymbol');
+  const idx = hasOriginal
+    ? findRuleIndex(rules, payload.aPlatform, payload.aAccountId, payload.originalASymbol ?? null)
+    : -1;
+  if (idx >= 0) {
+    rules[idx] = entry;
+  } else {
+    rules.push(entry);
+  }
+
+  fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+}
+
+// JSON.stringify(_, null, 4) explodes every array (including
+// Stoploss-Takeprofit's 2 numbers) onto its own lines, which would turn a
+// one-rule edit into a diff touching every rule in the file -- the opposite
+// of the point of writing straight to the checked-in file. Collapses just
+// the short number-only arrays back onto one line after the fact; nothing
+// else in this file's shape (strings, objects) needs the same treatment.
+function formatConfigJson(obj) {
+  const json = JSON.stringify(obj, null, 4);
+  return json.replace(/\[\n\s*(-?\d+(?:\.\d+)?(?:,\n\s*-?\d+(?:\.\d+)?)*)\n\s*\]/g, (_match, nums) => {
+    const compact = nums.split(',').map((n) => n.trim()).join(', ');
+    return `[${compact}]`;
+  }) + '\n';
+}
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -258,6 +341,26 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: true, count }));
       } catch (err) {
         console.error('Failed to handle write:', err);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/config/rule') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (!payload.aPlatform || !payload.aAccountId) throw new Error('aPlatform and aAccountId are required');
+        applyRuleEdit(payload);
+        console.log(`[${new Date().toISOString()}] config: updated rule for ${payload.aPlatform}|${payload.aAccountId}${payload.aSymbol ? `|${payload.aSymbol}` : ''}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        console.error('Failed to update config:', err);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: String(err) }));
       }

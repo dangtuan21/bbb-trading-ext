@@ -28,7 +28,7 @@ function sideOf(key) {
  * just right-aligned with tabular-nums, shown as-is otherwise -- for
  * columns like Size/TotalSize/Opening that are numbers but not currency.
  */
-export default function DataTable({ columns, rows, emptyMessage = "No rows to show." }) {
+export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick }) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">
@@ -69,7 +69,11 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">
           {rows.map((row, i) => (
-            <tr key={i} className="hover:bg-slate-50">
+            <tr
+              key={i}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`hover:bg-slate-50 ${onRowClick ? "cursor-pointer" : ""}`}
+            >
               {cols.map((col) => {
                 const raw = row[col.key]
                 const isNegative = col.money && parseFloat(raw) < 0

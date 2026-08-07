@@ -387,7 +387,11 @@ function parseOcrPositions(rawText) {
 
     const symMatch = SYMBOL_RE.exec(line);
     if (!symMatch) continue;
-    const symbol = `${symMatch[1]}${symMatch[2]}`;
+    // Every other platform (and config.json's rules) use slash-separated
+    // symbols like "AUD/CHF" -- without the slash here, MainView's exact
+    // Platform+AccountID+Symbol rule lookup in compute.js silently never
+    // matches, dropping SL/TP/DD/B-match for every AlphaCapital row.
+    const symbol = `${symMatch[1]}/${symMatch[2]}`;
 
     const dirMatch = DIRECTION_RE.exec(line);
     if (!dirMatch) continue; // requiring a direction filters out OCR noise with no real trade row
