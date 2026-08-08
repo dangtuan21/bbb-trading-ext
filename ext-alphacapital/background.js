@@ -353,7 +353,17 @@ async function fnEnsurePanelAndGetBbox() {
 // slash or misreads suffixes, so this is intentionally loose. Confirmed live
 // that OCR can also drop the leading letter entirely ("AUDUSD" -> "\UDUSD"),
 // hence 2-4 chars (not a strict 3) on the first group.
-const SYMBOL_RE = /\b([A-Z]{2,4})[./]?([A-Z]{3,4})\b/;
+//
+// The trailing (?:\.?[a-z]+)? consumes an optional ".pro"/".sim"-style
+// suffix -- including when OCR drops the dot too, gluing it straight onto
+// the uppercase pair ("AUDCHF.pro" -> "AUDCHFpro"). Without this, \b right
+// after the second group never fires: \b only fires at a word/non-word
+// transition, and a lowercase suffix immediately following uppercase
+// letters is still word-to-word, no boundary -- confirmed live via a scan
+// that OCR'd "AUDCHFpro" correctly (visible in rawTextPreview) but still
+// came back with positionsFound: 0, because the old regex could never
+// match a trailing boundary inside that token.
+const SYMBOL_RE = /\b([A-Z]{2,4})[./]?([A-Z]{3,4})(?:\.?[a-z]+)?\b/;
 const DIRECTION_RE = /\b(buy|sell)\b/i;
 const LOT_RE = /(\d+(?:\.\d+)?)\s*lot/i;
 // FX quotes (Entry/TP/SL) render with 4-5 decimal digits, e.g. "0.69460";

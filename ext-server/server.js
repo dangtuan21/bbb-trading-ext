@@ -261,6 +261,9 @@ function applyRuleEdit(payload) {
   if (typeof payload.dailyDrawdown === 'number') {
     entry['A-DailyDrawdown'] = payload.dailyDrawdown;
   }
+  if (typeof payload.note === 'string' && payload.note) {
+    entry['Note'] = payload.note;
+  }
 
   const hasOriginal = Object.prototype.hasOwnProperty.call(payload, 'originalASymbol');
   const idx = hasOriginal

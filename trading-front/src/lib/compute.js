@@ -174,6 +174,7 @@ export function computeMainView(rows, matchRules = []) {
       stopLoss: rule.stopLoss ?? null,
       takeProfit: rule.takeProfit ?? null,
       dailyDrawdown: rule.dailyDrawdown ?? null,
+      note: rule.note ?? null,
       aSymbol: rule.aSymbol ?? null,
     }
     const accountKey = `${rule.aPlatform}|${rule.aAccountId}`
@@ -256,6 +257,7 @@ export function computeMainView(rows, matchRules = []) {
       A_PositionPL: l.PositionPL,
       SL: ruleTarget && ruleTarget.stopLoss !== null ? ruleTarget.stopLoss : "",
       TP: ruleTarget && ruleTarget.takeProfit !== null ? ruleTarget.takeProfit : "",
+      Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
       B_AccountID: r ? r.AccountID : "",
       B_AccountLabel: r ? r.AccountLabel : "",

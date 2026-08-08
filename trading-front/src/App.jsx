@@ -41,6 +41,7 @@ const MAINVIEW_COLUMNS = [
   { key: "B_Platform", label: "B Platform" },
   { key: "TP", label: "TP", numeric: true },
   { key: "SL", label: "SL", numeric: true },
+  { key: "Note", label: "Note" },
 ]
 
 export default function App() {

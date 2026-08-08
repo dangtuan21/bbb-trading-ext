@@ -26,6 +26,7 @@ export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
   const [sl, setSl] = useState(row.SL ?? "")
   const [tp, setTp] = useState(row.TP ?? "")
   const [dd, setDd] = useState(row.A_DD ?? "")
+  const [note, setNote] = useState(row.Note ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -42,6 +43,7 @@ export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
       stopLoss: sl === "" ? null : Number(sl),
       takeProfit: tp === "" ? null : Number(tp),
       dailyDrawdown: dd === "" ? null : Number(dd),
+      note: note.trim() || null,
     }
   }
 
@@ -134,12 +136,22 @@ export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
           </label>
         </div>
 
-        <label className="mb-4 block text-sm">
+        <label className="mb-3 block text-sm">
           <span className="mb-1 block font-medium text-slate-600">A-DailyDrawdown</span>
           <input
             type="number"
             value={dd}
             onChange={(e) => setDd(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+
+        <label className="mb-4 block text-sm">
+          <span className="mb-1 block font-medium text-slate-600">Note (optional)</span>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           />
         </label>
