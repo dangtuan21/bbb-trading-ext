@@ -51,14 +51,14 @@
             "match-B-position": "tastyfx|DTEN3|EUR/GBP",
             "Stoploss-Takeprofit": [-1000, 800],
             "A-DailyDrawdown": -500,
-            "Note": "harvest soon"
+            "Note": "carpet scroll"
         },
         {
             "A-position": "AlphaCapital|5103701|AUD/CHF",
             "match-B-position": "tastyfx|DTEN3|AUD/CHF",
             "Stoploss-Takeprofit": [-800, 500],
             "A-DailyDrawdown": -400,
-            "Note": "harvest soon"
+            "Note": "carpet scroll"
         }
     ],
     "schedule-interval": "60m"
