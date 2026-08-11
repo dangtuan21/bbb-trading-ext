@@ -34,17 +34,17 @@ const PLATFORM_KEY_BY_DISPLAY = {
 };
 
 const POSITIONS_FILE = path.join(__dirname, 'positions.csv');
-const FRONTEND_DATA_DIR = path.join(__dirname, '..', 'trading-front', 'public', 'data');
+const FRONTEND_DATA_DIR = path.join(__dirname, '..', 'trading-console', 'public', 'data');
 const POSITIONS_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'positions.csv');
 
 // Written directly (not mirrored) -- unlike positions.csv this IS the
-// checked-in source file trading-front's matchRules.js imports at build
+// checked-in source file trading-console's matchRules.js imports at build
 // time, so MainView's rule-editing UI (see App.jsx) intentionally leaves an
 // edit trail in `git diff` instead of living in a gitignored runtime copy.
 // Vite's own dev-server file watcher picks up the on-disk change and
 // reloads the page -- no separate fetch/mirror path needed for the frontend
 // to see it.
-const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-front', 'src', 'data-fact', 'config.json');
+const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-console', 'src', 'data-fact', 'config.json');
 
 function csvField(value) {
   const str = value === null || value === undefined ? '' : String(value);
@@ -211,7 +211,7 @@ function writeCombined() {
     fs.mkdirSync(path.dirname(POSITIONS_MIRROR_FILE), { recursive: true });
     fs.writeFileSync(POSITIONS_MIRROR_FILE, csv);
   } catch (err) {
-    console.warn('Could not mirror to trading-front:', err.message);
+    console.warn('Could not mirror to trading-console:', err.message);
   }
 }
 
@@ -220,7 +220,7 @@ function writeCombined() {
 // for this account" (an "A-position" with no third segment) rather than
 // "any rule for this account" -- a symbol-specific and a blanket rule can
 // coexist for the same account, so this must distinguish them exactly the
-// same way trading-front's matchRules.js parses "A-position".
+// same way trading-console's matchRules.js parses "A-position".
 function findRuleIndex(rules, platform, accountId, symbol) {
   return rules.findIndex((entry) => {
     const parts = String(entry?.['A-position'] || '').split('|').map((s) => s.trim());

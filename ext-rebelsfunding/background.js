@@ -61,6 +61,37 @@ async function waitForTextInTab(tabId, text, timeoutMs = 10000) {
   return false;
 }
 
+// Polls a tab's own URL (not its text content) until `predicate` matches or
+// the timeout elapses. Used specifically to wait out RF-Trader's SSO
+// token-exchange redirect: the tab first lands on
+// "pcwebtrader.rf-trader.com/sign-in?Token=..." and only client-side JS
+// later navigates it to the real terminal URL, so `waitForTabComplete`
+// (which fires on the sign-in page's own load, not the later redirect)
+// isn't enough on its own.
+function waitForTabUrlChange(tabId, predicate, timeoutMs) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    function check() {
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        if (predicate(tab.url || '')) {
+          resolve(tab);
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          resolve(tab);
+          return;
+        }
+        setTimeout(check, 400);
+      });
+    }
+    check();
+  });
+}
+
 function waitForNewTab(openerTabId, timeoutMs = RF_TRADER_TAB_TIMEOUT_MS) {
   return new Promise((resolve) => {
     let done = false;
@@ -236,6 +267,7 @@ function fnClickDetailsAt(index) {
   }
   return false;
 }
+
 
 // Also checks whether `expectedAccountId` actually appears on this page --
 // confirmed via a real run that a failed tab-switch (dashboard resets to
@@ -523,7 +555,23 @@ async function scrapeAccount(scanTabId, acc) {
       tabClickResult = await execInTab(scanTabId, fnClickTab, [acc.tab]);
       await sleep(1000 * (attempt + 1));
     }
-    await execInTab(scanTabId, fnClickDetailsAt, [acc.tabIndex]);
+    // Re-parse the account list fresh, right here, instead of trusting
+    // acc.tabIndex captured once at scan start -- RF Client Zone's account
+    // ordering isn't guaranteed stable across every fresh page load (e.g.
+    // an account can resort towards the top after being viewed earlier in
+    // the same scan), so a stale index can point at a different account's
+    // Details button by the time a later account's turn comes up.
+    // Re-parsing immediately before the click uses the exact same DOM
+    // state the click itself will act on, so the index can't go stale
+    // between the two. (An earlier attempt at this fix tried matching each
+    // Details button to an account ID by walking up its ancestors -- that
+    // backfired: climbing enough levels to reach one account's own card
+    // eventually reaches the container ALL cards share, whose text
+    // contains every account ID, so it kept matching whichever button
+    // came first in DOM order no matter which account was requested.)
+    const freshAccounts = await execInTab(scanTabId, fnParseAccounts, [acc.tab]);
+    const freshMatch = (freshAccounts || []).find((a) => a.account === acc.account);
+    await execInTab(scanTabId, fnClickDetailsAt, [freshMatch ? freshMatch.tabIndex : acc.tabIndex]);
     // "Details" click is an in-app route change, not a real page load --
     // poll for the new content instead of assuming a fixed delay is enough.
     await waitForTextInTab(scanTabId, 'Balance', 10000);
@@ -569,6 +617,16 @@ async function scrapeAccount(scanTabId, acc) {
     if (rfTab) {
       try {
         await waitForTabComplete(rfTab.id);
+        // RF-Trader opens on "pcwebtrader.rf-trader.com/sign-in?Token=..."
+        // and only redirects to the real terminal once its own JS validates
+        // the SSO token -- a live scan showed 5/7 accounts still sitting on
+        // that sign-in URL after scrapeRfTraderPositions's ~4s internal
+        // frame-detection budget expired (diag.checkedFrames[0].url ending
+        // in "/sign-in?Token=..."), while only the first 2 accounts
+        // happened to redirect fast enough. Wait explicitly (up to 15s) for
+        // the URL to move off /sign-in before starting frame detection,
+        // rather than relying on that budget to cover this too.
+        await waitForTabUrlChange(rfTab.id, (url) => !url.includes('/sign-in'), 15000);
         const result = await scrapeRfTraderPositions(rfTab.id);
         positions = result.positions;
         diag = result.diag;

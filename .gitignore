@@ -7,14 +7,14 @@ node_modules/
 # Runtime data written by the extensions/server -- contains real account
 # balances, equity, and open positions, not just sample data.
 ext-server/*.csv
-trading-front/public/data/*.csv
+trading-console/public/data/*.csv
 
 # Logs
 *.log
 npm-debug.log*
 
 # Build output
-trading-front/dist/
+trading-console/dist/
 
 # Editor
 .vscode/
