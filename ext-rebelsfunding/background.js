@@ -299,6 +299,16 @@ function fnScrapeBalanceEquity(expectedAccountId) {
   };
 }
 
+// RF-Trader (a separate origin/SSO deep-link from RF Client Zone) always
+// shows the account ID in its own header -- e.g. "22026427572022
+// Silver-10,000 phase1", confirmed live via a real screenshot. Mirrors
+// fnScrapeBalanceEquity's account-ID check on the RF Client Zone side,
+// which this tab has none of on its own.
+function fnVerifyRfTraderAccount(expectedAccountId) {
+  const bodyText = document.body.innerText || document.body.textContent || '';
+  return { accountIdFound: expectedAccountId ? bodyText.includes(expectedAccountId) : null };
+}
+
 function fnClickRFTraderLogin() {
   const candidates = Array.from(document.querySelectorAll('button, [role="button"], a'));
   for (const el of candidates) {
@@ -415,7 +425,8 @@ async function fnScrapePositions() {
       const orderText = field(row, '.order-info .main-info');
       const m = ORDER_RE.exec(orderText);
       if (!m) continue;
-      if (/UPL:\s*--/.test(field(row, '.pnl-info'))) anyNotReady = true;
+      const notReady = /UPL:\s*--/.test(field(row, '.pnl-info'));
+      if (notReady) anyNotReady = true;
       positions.push({
         PosID: '#' + m[1],
         Symbol: m[2].toUpperCase(),
@@ -427,6 +438,7 @@ async function fnScrapePositions() {
         StopLoss: slTp(field(row, '.sl-info .main-info')),
         TakeProfit: slTp(field(row, '.tp-info .main-info')),
         PositionPL: money(field(row, '.total-info .main-info')),
+        _plNotReady: notReady,
       });
     }
 
@@ -457,6 +469,17 @@ async function fnScrapePositions() {
     pollAttempts += 1;
   }
   result.pollAttempts = pollAttempts;
+  // Retries exhausted and a row's UPL still never populated -- its
+  // .total-info is fee-only, not UPL+fee (see comment above scrapeOnce), so
+  // trusting it would silently write a real-looking but wrong PositionPL
+  // (confirmed live: RF-205-43891 scraped "-0.44", its transaction fee
+  // alone, while the position's actual P&L was around -130). Surface it as
+  // genuinely unknown instead, same 'n/a' convention used everywhere else
+  // in this codebase for unavailable values.
+  for (const p of result.positions) {
+    if (p._plNotReady) p.PositionPL = 'n/a';
+    delete p._plNotReady;
+  }
   return result;
 }
 
@@ -475,12 +498,25 @@ async function dismissRouteModal(tabId) {
   await sleep(1000);
 }
 
-async function scrapeRfTraderPositions(tabId) {
+async function scrapeRfTraderPositions(tabId, expectedAccountId) {
   await sleep(1500);
   await dismissRouteModal(tabId);
   await sleep(500);
   await execInTab(tabId, fnDismissModals).catch(() => {});
   await sleep(500);
+
+  // Confirmed live (account 22026427572022) that RF-Trader can silently
+  // show a DIFFERENT account's position data with no error -- its own SSO
+  // deep-link per account isn't guaranteed to land on the one just
+  // requested. Bail out here rather than attributing another account's
+  // real positions to this one; see fnVerifyRfTraderAccount.
+  const verify = await execInTab(tabId, fnVerifyRfTraderAccount, [expectedAccountId]).catch(() => null);
+  if (verify && verify.accountIdFound === false) {
+    return {
+      positions: [], equity: '',
+      diag: { reason: 'rf-trader-account-mismatch', expected: expectedAccountId },
+    };
+  }
 
   let targetFrameId = null;
   let checkedFrames = [];
@@ -627,7 +663,7 @@ async function scrapeAccount(scanTabId, acc) {
         // the URL to move off /sign-in before starting frame detection,
         // rather than relying on that budget to cover this too.
         await waitForTabUrlChange(rfTab.id, (url) => !url.includes('/sign-in'), 15000);
-        const result = await scrapeRfTraderPositions(rfTab.id);
+        const result = await scrapeRfTraderPositions(rfTab.id, acc.account);
         positions = result.positions;
         diag = result.diag;
         if (result.equity) equity = result.equity;
