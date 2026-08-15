@@ -1,16 +1,13 @@
-SnapshotDate,Platform,AccountID,AccountLabel,IsRealMoney,Balance,Equity,AccountPL,PosID,Symbol,Direction,Size,SizeUnit,Opening,Latest,StopLoss,TakeProfit,PositionPL
-08-12-2026,tastyfx,DTEN3,Standard,,2826.10,,204.56,n/a,AUD/CHF,Buy,0.16,lot,0.57152,0.57396,none,none,47.96
-08-12-2026,tastyfx,DTEN3,Standard,,2826.10,,204.56,n/a,GBP/CHF,Buy,0.08,lot,1.09029,1.09772,none,none,73.02
-08-12-2026,tastyfx,DTEN3,Standard,,2826.10,,204.56,n/a,CAD/CHF,Buy,0.08,lot,0.58187,0.5835,none,none,16.02
-08-12-2026,tastyfx,DTEN3,Standard,,2826.10,,204.56,n/a,EUR/GBP,Sell,0.16,lot,0.8574,0.85427,none,none,67.55
-08-12-2026,RebelsFunding,RF-054-45234,Copper,No,39997.85,39396.49,,n/a,n/a,n/a,n/a,n/a,n/a,n/a,none,none,
-08-12-2026,RebelsFunding,RF-029-45036,Copper,No,39995.94,37165.03,-2830.91,#125034661,GBP/CHF,Sell,0.01,lot,1.09600,1.09771,none,none,-2.11
-08-12-2026,RebelsFunding,RF-029-45036,Copper,No,39995.94,37165.03,-2830.91,#124453995,GBP/CHF,Sell,3.00,lot,1.09004,1.09771,none,none,-2832.86
-08-12-2026,RebelsFunding,22026427572022,Silver,No,9974.04,9625.34,-348.70,#123991567,EUR/GBP,Buy,0.80,lot,0.85739,0.85416,none,0.86485,-349.62
-08-12-2026,RebelsFunding,RF-205-43891,Copper,No,9461.18,9333.01,-128.17,#122683909,NZD/CHF,Sell,0.75,lot,0.47500,0.47638,none,0.4675,-127.68
-08-12-2026,RebelsFunding,42026425387055,Copper,No,9475.82,9482.27,6.45,#124193035,NZD/CHF,Sell,0.75,lot,0.47643,0.47636,none,0.46893,6.01
-08-12-2026,RebelsFunding,12026404876211,Gold,No,9649.36,9541.52,-107.84,#125028145,GBP/CHF,Sell,0.51,lot,1.09602,1.09774,none,none,-108.53
-08-12-2026,RebelsFunding,RCF-407-42579,Bronze,No,10001.85,9591.77,-410.08,#124193515,EUR/CHF,Sell,0.01,lot,0.93708,0.93769,none,none,-0.76
-08-12-2026,RebelsFunding,RCF-407-42579,Bronze,No,10001.85,9591.77,-410.08,#123146139,EUR/CHF,Sell,0.75,lot,0.93325,0.93769,none,0.93003,-410.19
-08-12-2026,FTMO,650006975,FTMO Challenge,No,,,,n/a,n/a,n/a,n/a,n/a,n/a,n/a,none,none,
-08-12-2026,AlphaCapital,5103701,Leverage 1:100,No,10000.00,9668.96,,n/a,AUD/CHF,Sell,0.8,lot,0.57130,n/a,none,none,-331.04
+SnapshotDate,Platform,AccountID,AccountLabel,IsRealMoney,Balance,Equity,AccountPL,InitialBalance,StartingEquity,MaxDailyDrawdown,TodayDrawdown,PosID,Symbol,Direction,Size,SizeUnit,Opening,Latest,StopLoss,TakeProfit,PositionPL
+08-14-2026,tastyfx,DTEN3,Standard,,3516.46,,133.49,,,,,n/a,CAD/CHF,Buy,0.08,lot,0.58187,0.58618,none,none,42.39
+08-14-2026,tastyfx,DTEN3,Standard,,3516.46,,133.49,,,,,n/a,EUR/GBP,Sell,0.16,lot,0.8574,0.8546,none,none,60.64
+08-14-2026,tastyfx,DTEN3,Standard,,3516.46,,133.49,,,,,n/a,EUR/AUD,Sell,0.23,lot,1.63498,1.63311,none,none,30.46
+08-14-2026,RebelsFunding,22026429113565,Silver,No,39996.54,39503.54,-493.00,40000,,1977.38,43.99,#125330691,EUR/AUD,Buy,3.00,lot,1.63517,1.63286,none,1.65048,-494.34
+08-14-2026,RebelsFunding,RF-054-45234,Copper,No,39997.84,38277.65,-1720.19,40000,,1946.64,655.23,#125314425,CAD/CHF,Sell,0.01,lot,0.58500,0.58631,none,none,-1.62
+08-14-2026,RebelsFunding,RF-054-45234,Copper,No,39997.84,38277.65,-1720.19,40000,,1946.64,655.23,#124895929,CAD/CHF,Sell,3.00,lot,0.58165,0.58631,none,0.57844,-1720.73
+08-14-2026,RebelsFunding,22026427572022,Silver,No,9974.04,9665.46,-308.58,10000,,484.89,32.36,#123991567,EUR/GBP,Buy,0.80,lot,0.85739,0.85454,none,0.86485,-309.50
+08-14-2026,RebelsFunding,RF-205-43891,Copper,No,9122.27,9121.70,-0.57,10000,,466.84,215.08,#125810327,NZD/CHF,Sell,0.01,lot,0.47854,0.47900,none,none,-0.58
+08-14-2026,RebelsFunding,42026425387055,Copper,No,9268.79,9268.19,-0.60,10000,,474.16,215,#125810295,NZD/CHF,Sell,0.01,lot,0.47855,0.47904,none,none,-0.61
+08-14-2026,RebelsFunding,RCF-407-42579,Bronze,No,9334.22,9329.46,-4.76,10000,,474.84,162.62,#124193515,EUR/CHF,Sell,0.01,lot,0.93708,0.94093,none,none,-4.74
+08-14-2026,FTMO,n/a,FTMO Challenge,No,,10643.93,No open trades,,,,,n/a,n/a,n/a,n/a,n/a,n/a,n/a,none,none,No open trades
+08-14-2026,AlphaCapital,5103701,Leverage 1:100,No,9585.71,9585.71,,,,,,n/a,n/a,n/a,n/a,n/a,n/a,n/a,none,none,

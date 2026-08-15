@@ -63,10 +63,14 @@ function fmt2(n) {
 }
 
 // Union of every platform's columns. tastyfx doesn't have a concept of
-// IsRealMoney -- its rows just leave that field blank.
+// IsRealMoney -- its rows just leave that field blank. InitialBalance/
+// StartingEquity/MaxDailyDrawdown/TodayDrawdown are RebelsFunding-only (from
+// RF-Trader's "Contest stats" tab) -- every other platform leaves them blank
+// too.
 const HEADER = [
   'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
+  'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'TodayDrawdown',
   'PosID', 'Symbol', 'Direction', 'Size', 'SizeUnit',
   'Opening', 'Latest', 'StopLoss', 'TakeProfit', 'PositionPL',
 ];

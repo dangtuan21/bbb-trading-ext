@@ -364,6 +364,28 @@ function fnCheckPositionsFrame() {
   };
 }
 
+// Generic version of fnClickPositionsTab -- same two-strategy click (an
+// actual [role="tab"] element first, falling back to any leaf element whose
+// text matches exactly), just parameterized on the tab label instead of
+// hardcoding "Positions".
+function fnClickTabByText(tabText) {
+  const roleTabs = document.querySelectorAll('[role="tab"]');
+  for (const t of roleTabs) {
+    if (t.textContent.trim() === tabText && t.offsetParent) {
+      t.click();
+      return 'role-tab';
+    }
+  }
+  const all = document.querySelectorAll('body *');
+  for (const el of all) {
+    if (el.textContent.trim() === tabText && el.children.length <= 1 && el.offsetParent) {
+      el.click();
+      return 'text-match';
+    }
+  }
+  return null;
+}
+
 function fnClickPositionsTab() {
   const roleTabs = document.querySelectorAll('[role="tab"]');
   for (const t of roleTabs) {
@@ -380,6 +402,53 @@ function fnClickPositionsTab() {
     }
   }
   return null;
+}
+
+// Reads Initial Balance / Starting Equity / Max Daily Drawdown / Today's
+// Drawdown off the "Contest stats" tab (same tab bar as "Positions", within
+// the same frame -- see fnCheckPositionsFrame). Label-based, same tolerant
+// "label and value either on the same line or the next one" approach as
+// fnScrapeBalanceEquity, since this renders as plain DOM text like every
+// other RF-Trader panel (confirmed live via a real screenshot), not canvas.
+function fnScrapeContestStats() {
+  function moneyVal(s) {
+    if (!s) return '';
+    const m = /-?\$?\s*[\d,]+(?:\.\d+)?/.exec(s);
+    return m ? m[0].replace('$', '').replace(/,/g, '').trim() : '';
+  }
+  const text = document.body.innerText || document.body.textContent || '';
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  function valueAfterLabel(label) {
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i] === label) return lines[i + 1] || '';
+      if (lines[i].startsWith(label)) {
+        const rest = lines[i].slice(label.length).trim();
+        return rest || lines[i + 1] || '';
+      }
+    }
+    return '';
+  }
+
+  const todayDrawdown = moneyVal(valueAfterLabel("Today's Drawdown"));
+  // Debug aid: if this label ever stops matching (a wording change, etc.),
+  // show the text actually surrounding Max Daily Drawdown (a reliable
+  // anchor) so the real label can be read off directly instead of guessed
+  // blind -- this is exactly how "Loss on <date>" got corrected to the
+  // real, confirmed-live label "Today's Drawdown" above.
+  let maxDdContext = null;
+  if (!todayDrawdown) {
+    const maxDdIdx = lines.findIndex((l) => l.startsWith('Max Daily Drawdown'));
+    if (maxDdIdx >= 0) maxDdContext = lines.slice(maxDdIdx, maxDdIdx + 8);
+  }
+
+  return {
+    initialBalance: moneyVal(valueAfterLabel('Initial Balance')),
+    startingEquity: moneyVal(valueAfterLabel('Starting Equity')),
+    maxDailyDrawdown: moneyVal(valueAfterLabel('Max Daily Drawdown')),
+    todayDrawdown,
+    maxDdContext,
+  };
 }
 
 async function fnScrapePositions() {
@@ -545,6 +614,13 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
   }
 
   await execInFrame(tabId, targetFrameId, fnDismissModals).catch(() => {});
+  const contestTabClickResult = await execInFrame(tabId, targetFrameId, fnClickTabByText, ['Contest stats']).catch(() => null);
+  await sleep(1500);
+  await execInFrame(tabId, targetFrameId, fnDismissModals).catch(() => {});
+  const contestStats = await execInFrame(tabId, targetFrameId, fnScrapeContestStats).catch(() => ({
+    initialBalance: '', startingEquity: '', maxDailyDrawdown: '', todayDrawdown: '', maxDdContext: null,
+  }));
+
   const clickResult = await execInFrame(tabId, targetFrameId, fnClickPositionsTab).catch(() => null);
   await sleep(1500);
   await execInFrame(tabId, targetFrameId, fnDismissModals).catch(() => {});
@@ -558,8 +634,13 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
     positions: scraped.positions || [],
     equity: scraped.equity || '',
     accountPL: scraped.accountPL || '',
+    initialBalance: contestStats.initialBalance || '',
+    startingEquity: contestStats.startingEquity || '',
+    maxDailyDrawdown: contestStats.maxDailyDrawdown || '',
+    todayDrawdown: contestStats.todayDrawdown || '',
     diag: {
       targetFrameId,
+      contestTabClickResult,
       clickResult,
       rowCount: scraped.rowCount,
       debugSample: scraped.debugSample,
@@ -567,6 +648,7 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
       pollAttempts: scraped.pollAttempts,
       stillNotReady: scraped.anyNotReady,
       error: scraped.error,
+      maxDdContext: contestStats.maxDdContext,
     },
   };
 }
@@ -639,6 +721,10 @@ async function scrapeAccount(scanTabId, acc) {
 
   let positions = [];
   let accountPL = '';
+  let initialBalance = '';
+  let startingEquity = '';
+  let maxDailyDrawdown = '';
+  let todayDrawdown = '';
   let diag = null;
   // waitForNewTab must start listening BEFORE the click, not after -- the
   // click's window.open() can fire (and the tabs.onCreated event with it)
@@ -668,6 +754,10 @@ async function scrapeAccount(scanTabId, acc) {
         diag = result.diag;
         if (result.equity) equity = result.equity;
         if (result.accountPL) accountPL = result.accountPL;
+        if (result.initialBalance) initialBalance = result.initialBalance;
+        if (result.startingEquity) startingEquity = result.startingEquity;
+        if (result.maxDailyDrawdown) maxDailyDrawdown = result.maxDailyDrawdown;
+        if (result.todayDrawdown) todayDrawdown = result.todayDrawdown;
       } finally {
         // Awaited (not fire-and-forget) so the next account's flow can't
         // start while this tab is still mid-close.
@@ -694,6 +784,10 @@ async function scrapeAccount(scanTabId, acc) {
     Balance: balance,
     Equity: equity,
     AccountPL: accountPL,
+    InitialBalance: initialBalance,
+    StartingEquity: startingEquity,
+    MaxDailyDrawdown: maxDailyDrawdown,
+    TodayDrawdown: todayDrawdown,
   };
 
   if (!positions.length) {
@@ -728,6 +822,7 @@ function _blankRowForAccount(acc) {
   return {
     SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
     AccountLabel: acc.program, IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
+    InitialBalance: '', StartingEquity: '', MaxDailyDrawdown: '', TodayDrawdown: '',
     PosID: '', Symbol: '', Direction: '', Size: '', SizeUnit: '', Opening: '', Latest: '',
     StopLoss: '', TakeProfit: '', PositionPL: '',
   };

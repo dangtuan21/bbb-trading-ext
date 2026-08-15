@@ -1,6 +1,8 @@
 // Client-side roll-up of the raw PositionLog rows into an AccountLog view
 // (one row per Platform+AccountID+Symbol).
 
+import { DEFAULT_ALARM_DAILY_DRAWDOWN_PCT } from "./settings"
+
 function toNumber(value) {
   const n = parseFloat(value)
   return Number.isNaN(n) ? null : n
@@ -79,7 +81,7 @@ const A_SIDE_PLATFORMS = new Set(["RebelsFunding", "AlphaCapital", "FTMO"])
  * present in the current data, still shows -- the B_ columns are just left
  * blank rather than dropping the row.
  */
-export function computeMainView(rows, matchRules = []) {
+export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAULT_ALARM_DAILY_DRAWDOWN_PCT) {
   const leftGroups = new Map()
   for (const row of rows) {
     if (!A_SIDE_PLATFORMS.has(row.Platform)) continue
@@ -94,6 +96,8 @@ export function computeMainView(rows, matchRules = []) {
         Balance: row.Balance,
         Equity: row.Equity,
         AccountPL: row.AccountPL,
+        MaxDailyDrawdown: row.MaxDailyDrawdown,
+        TodayDrawdown: row.TodayDrawdown,
         symbols: new Set(),
         directions: new Set(),
         totalSize: 0,
@@ -116,6 +120,8 @@ export function computeMainView(rows, matchRules = []) {
     Balance: g.Balance,
     Equity: g.Equity,
     AccountPL: g.AccountPL,
+    MaxDailyDrawdown: g.MaxDailyDrawdown,
+    TodayDrawdown: g.TodayDrawdown,
     Symbol: g.symbols.size ? [...g.symbols].join(", ") : "n/a",
     Direction: g.directions.size ? [...g.directions].join(", ") : "n/a",
     TotalSize: round2(g.totalSize),
@@ -253,7 +259,13 @@ export function computeMainView(rows, matchRules = []) {
       A_Symbol: l.Symbol,
       A_Direction: l.Direction,
       A_TotalSize: l.TotalSize,
-      A_DD: ruleTarget && ruleTarget.dailyDrawdown !== null ? ruleTarget.dailyDrawdown : "",
+      A_MaxDailyDrawdown: l.MaxDailyDrawdown || "",
+      A_TodayDrawdown: l.TodayDrawdown || "",
+      // Flags the Max/Today Drawdown cells for a visual warning once
+      // today's realized drawdown reaches 20% of the platform's own daily
+      // limit -- an early heads-up well before the account is actually at
+      // risk of breaching it.
+      A_DrawdownWarning: isDrawdownWarning(l.MaxDailyDrawdown, l.TodayDrawdown, alarmThresholdPct),
       A_PositionPL: l.PositionPL,
       SL: ruleTarget && ruleTarget.stopLoss !== null ? ruleTarget.stopLoss : "",
       TP: ruleTarget && ruleTarget.takeProfit !== null ? ruleTarget.takeProfit : "",
@@ -285,6 +297,13 @@ export function computeMainView(rows, matchRules = []) {
 
 function normSymbol(s) {
   return (s || "").trim().toUpperCase()
+}
+
+function isDrawdownWarning(maxDailyDrawdown, todayDrawdown, thresholdPct) {
+  const max = toNumber(maxDailyDrawdown)
+  const today = toNumber(todayDrawdown)
+  if (max === null || today === null || max <= 0) return false
+  return today / max >= thresholdPct / 100
 }
 
 export function formatMoney(value) {

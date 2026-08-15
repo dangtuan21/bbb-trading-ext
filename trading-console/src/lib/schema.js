@@ -10,6 +10,10 @@ export const POSITIONLOG_FIELDS = [
   "Balance",
   "Equity",
   "AccountPL",
+  "InitialBalance",
+  "StartingEquity",
+  "MaxDailyDrawdown",
+  "TodayDrawdown",
   "PosID",
   "Symbol",
   "Direction",
@@ -22,7 +26,16 @@ export const POSITIONLOG_FIELDS = [
   "PositionPL",
 ]
 
-export const MONEY_FIELDS = new Set(["Balance", "Equity", "AccountPL", "PositionPL"])
+export const MONEY_FIELDS = new Set([
+  "Balance",
+  "Equity",
+  "AccountPL",
+  "InitialBalance",
+  "StartingEquity",
+  "MaxDailyDrawdown",
+  "TodayDrawdown",
+  "PositionPL",
+])
 
 // Non-money but still numeric columns -- right-aligned like money columns,
 // but shown as-is (no formatMoney, no red-on-negative).

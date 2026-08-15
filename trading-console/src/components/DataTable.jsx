@@ -27,6 +27,12 @@ function sideOf(key) {
  * negative. `numeric` columns (money columns are always numeric too) are
  * just right-aligned with tabular-nums, shown as-is otherwise -- for
  * columns like Size/TotalSize/Opening that are numbers but not currency.
+ *
+ * `highlightIf(row)` (optional) flags a cell for a warning background --
+ * evaluated per row, so it can key off other fields on that same row (e.g.
+ * MainView's Max/Today Drawdown cells, flagged together off a single
+ * precomputed row.A_DrawdownWarning rather than each column re-deriving the
+ * ratio itself).
  */
 export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick }) {
   if (!rows.length) {
@@ -77,12 +83,15 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
               {cols.map((col) => {
                 const raw = row[col.key]
                 const isNegative = col.money && parseFloat(raw) < 0
+                const isHighlighted = col.highlightIf && col.highlightIf(row)
                 return (
                   <td
                     key={col.key}
                     className={`whitespace-nowrap px-3 py-2 ${
                       col.numeric ? "text-right tabular-nums" : "text-left"
-                    } ${isNegative ? "text-red-600" : "text-slate-700"}`}
+                    } ${isHighlighted ? "bg-amber-100" : ""} ${
+                      isNegative ? "text-red-600" : "text-slate-700"
+                    }`}
                   >
                     {col.money ? formatMoney(raw) : raw}
                   </td>

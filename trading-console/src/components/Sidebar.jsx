@@ -2,6 +2,7 @@ const NAV_ITEMS = [
   { id: "mainview", label: "Main View" },
   { id: "positionlog", label: "Position Log" },
   { id: "accountlog", label: "Account Log" },
+  { id: "settings", label: "Settings" },
 ]
 
 export default function Sidebar({ active, onSelect }) {

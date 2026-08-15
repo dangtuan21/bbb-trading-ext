@@ -2,11 +2,13 @@ import { useMemo, useState } from "react"
 import Sidebar from "./components/Sidebar"
 import DataTable from "./components/DataTable"
 import RuleEditForm from "./components/RuleEditForm"
+import SettingsPage from "./components/SettingsPage"
 import { usePositionLog } from "./lib/usePositionLog"
 import { useRelativeTime } from "./lib/relativeTime"
 import { computeAccountLog, computeMainView } from "./lib/compute"
 import { matchRules } from "./lib/matchRules"
 import { POSITIONLOG_FIELDS } from "./lib/schema"
+import { useAlarmThreshold } from "./lib/settings"
 
 const ACCOUNTLOG_COLUMNS = [
   "Platform",
@@ -29,12 +31,13 @@ const ACCOUNTLOG_COLUMNS = [
 const MAINVIEW_COLUMNS = [
   { key: "A_Platform", label: "A Platform" },
   { key: "A_AccountID", label: "A Account ID" },
-  { key: "A_Equity", label: "A Equity", money: true },
   { key: "A_AccountPL", label: "A Account PL", money: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
-  { key: "A_DD", label: "A-DD", numeric: true },
+  { key: "A_Equity", label: "A Equity", money: true },
+  { key: "A_MaxDailyDrawdown", label: "Max Daily DD", money: true, highlightIf: (row) => row.A_DrawdownWarning },
+  { key: "A_TodayDrawdown", label: "Today's DD", money: true, highlightIf: (row) => row.A_DrawdownWarning },
   { key: "A_PositionPL", label: "A P&L", money: true },
   { key: "B_SymbolPL", label: "B P&L", money: true },
   { key: "B_TotalSize", label: "B Size", numeric: true },
@@ -48,9 +51,13 @@ export default function App() {
   const [active, setActive] = useState("mainview")
   const { rows, status, error, updatedAt } = usePositionLog()
   const relativeUpdatedAt = useRelativeTime(updatedAt)
+  const [alarmThresholdPct, setAlarmThresholdPct] = useAlarmThreshold()
 
   const accountLogRows = useMemo(() => computeAccountLog(rows), [rows])
-  const mainView = useMemo(() => computeMainView(rows, matchRules), [rows])
+  const mainView = useMemo(
+    () => computeMainView(rows, matchRules, alarmThresholdPct),
+    [rows, alarmThresholdPct]
+  )
 
   // Options for RuleEditForm's B-position dropdown -- every currently-known
   // non-A-side Platform+AccountID+Symbol, deduped (an account can carry
@@ -77,18 +84,22 @@ export default function App() {
       <main className="flex-1 overflow-auto p-6">
         <header className="mb-4 flex items-baseline justify-between">
           <h2 className="text-xl font-semibold text-slate-800">{titleFor(active)}</h2>
-          {status === "ready" && (
+          {status === "ready" && active !== "settings" && (
             <span className="text-xs text-slate-400">
               {rows.length} row{rows.length === 1 ? "" : "s"} · {relativeUpdatedAt ?? "data/positions.csv"}
             </span>
           )}
         </header>
 
-        {status === "loading" && (
+        {active === "settings" && (
+          <SettingsPage alarmThresholdPct={alarmThresholdPct} onChange={setAlarmThresholdPct} />
+        )}
+
+        {active !== "settings" && status === "loading" && (
           <p className="text-sm text-slate-400">Loading positions.csv...</p>
         )}
 
-        {status === "error" && (
+        {active !== "settings" && status === "error" && (
           <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             Couldn't load the CSV data: {error}
           </p>
@@ -130,6 +141,8 @@ function titleFor(id) {
       return "Account Log"
     case "mainview":
       return "Main View"
+    case "settings":
+      return "Settings"
     default:
       return "Position Log"
   }
