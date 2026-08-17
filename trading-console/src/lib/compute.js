@@ -1,7 +1,7 @@
 // Client-side roll-up of the raw PositionLog rows into an AccountLog view
 // (one row per Platform+AccountID+Symbol).
 
-import { DEFAULT_ALARM_DAILY_DRAWDOWN_PCT } from "./settings"
+import { DEFAULT_WARNING_DAILY_DRAWDOWN_PCT, DEFAULT_WARNING_DRAWDOWN_PCT } from "./settings"
 
 function toNumber(value) {
   const n = parseFloat(value)
@@ -81,7 +81,12 @@ const A_SIDE_PLATFORMS = new Set(["RebelsFunding", "AlphaCapital", "FTMO"])
  * present in the current data, still shows -- the B_ columns are just left
  * blank rather than dropping the row.
  */
-export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAULT_ALARM_DAILY_DRAWDOWN_PCT) {
+export function computeMainView(
+  rows,
+  matchRules = [],
+  warningDailyDrawdownPct = DEFAULT_WARNING_DAILY_DRAWDOWN_PCT,
+  warningDrawdownPct = DEFAULT_WARNING_DRAWDOWN_PCT
+) {
   const leftGroups = new Map()
   for (const row of rows) {
     if (!A_SIDE_PLATFORMS.has(row.Platform)) continue
@@ -98,6 +103,11 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
         AccountPL: row.AccountPL,
         MaxDailyDrawdown: row.MaxDailyDrawdown,
         TodayDrawdown: row.TodayDrawdown,
+        MaxDrawdownAmount: row.MaxDrawdownAmount,
+        MaxDrawdownPct: row.MaxDrawdownPct,
+        CurrentValueAmount: row.CurrentValueAmount,
+        CurrentValuePct: row.CurrentValuePct,
+        ProfitTarget: row.ProfitTarget,
         symbols: new Set(),
         directions: new Set(),
         totalSize: 0,
@@ -122,6 +132,11 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
     AccountPL: g.AccountPL,
     MaxDailyDrawdown: g.MaxDailyDrawdown,
     TodayDrawdown: g.TodayDrawdown,
+    MaxDrawdownAmount: g.MaxDrawdownAmount,
+    MaxDrawdownPct: g.MaxDrawdownPct,
+    CurrentValueAmount: g.CurrentValueAmount,
+    CurrentValuePct: g.CurrentValuePct,
+    ProfitTarget: g.ProfitTarget,
     Symbol: g.symbols.size ? [...g.symbols].join(", ") : "n/a",
     Direction: g.directions.size ? [...g.directions].join(", ") : "n/a",
     TotalSize: round2(g.totalSize),
@@ -146,11 +161,11 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
 
   // ruleMap key: "A_Platform|A_AccountID|A_Symbol" (normalized) -> target,
   // built only from rules that name a specific symbol. target carries
-  // { platform, accountId, symbol, stopLoss, takeProfit, dailyDrawdown,
-  // aSymbol } for the right-side row it should pair with, plus that rule's
-  // configured SL/TP/DD -- aSymbol is the rule's own (un-normalized) A-side
-  // symbol, threaded through so the edit UI can tell which existing rule it
-  // would be replacing.
+  // { platform, accountId, symbol, dailyDrawdown, aSymbol } for the
+  // right-side row it should pair with, plus that rule's configured DD --
+  // aSymbol is the rule's own (un-normalized) A-side symbol, threaded
+  // through so the edit UI can tell which existing rule it would be
+  // replacing.
   //
   // ruleMapByAccount key: "A_Platform|A_AccountID" -> target, built only
   // from blanket rules (no A-side symbol) -- the first fallback used when no
@@ -177,8 +192,6 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
       platform: rule.bPlatform,
       accountId: rule.bAccountId,
       symbol: normSymbol(rule.bSymbol),
-      stopLoss: rule.stopLoss ?? null,
-      takeProfit: rule.takeProfit ?? null,
       dailyDrawdown: rule.dailyDrawdown ?? null,
       note: rule.note ?? null,
       aSymbol: rule.aSymbol ?? null,
@@ -197,10 +210,7 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
   // row's Symbol can be a joined list if that account has more than one
   // open position), look up an explicit rule for that exact
   // Platform+AccountID+Symbol. If a rule exists AND its target right row is
-  // present in the current data, pair them. SL/TP show whenever a rule
-  // exists for the row, even with no B-side match -- they're the
-  // configured thresholds for that pairing, not derived from live B-side
-  // data.
+  // present in the current data, pair them.
   const joined = []
   for (const l of left) {
     const leftSymbols = l.Symbol === "n/a" ? [] : l.Symbol.split(", ")
@@ -210,7 +220,7 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
       const target = ruleMap.get(`${l.Platform}|${l.AccountID}|${normSymbol(sym)}`)
       if (!target) continue
       if (!ruleTarget) ruleTarget = target
-      if (!target.platform) continue // rule with no match-B-position -- SL/TP still carried via ruleTarget above
+      if (!target.platform) continue // rule with no match-B-position -- Note/DD still carried via ruleTarget above
       r = right.find(
         (rr) =>
           rr.Platform === target.platform &&
@@ -225,8 +235,8 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
 
     // No open position matched a rule (most often because the account has
     // no open positions at all) -- fall back to the account's blanket rule
-    // so SL/TP still show, and still try the B-side pairing off the rule's
-    // own symbol.
+    // so Note/DD still show, and still try the B-side pairing off the
+    // rule's own symbol.
     if (!ruleTarget) {
       const accountKey = `${l.Platform}|${l.AccountID}`
       let fallback = ruleMapByAccount.get(accountKey)
@@ -255,20 +265,27 @@ export function computeMainView(rows, matchRules = [], alarmThresholdPct = DEFAU
       A_AccountLabel: l.AccountLabel,
       A_Balance: l.Balance,
       A_Equity: l.Equity,
+      A_ProfitTarget: l.ProfitTarget || "",
       A_AccountPL: l.AccountPL,
       A_Symbol: l.Symbol,
       A_Direction: l.Direction,
       A_TotalSize: l.TotalSize,
       A_MaxDailyDrawdown: l.MaxDailyDrawdown || "",
       A_TodayDrawdown: l.TodayDrawdown || "",
-      // Flags the Max/Today Drawdown cells for a visual warning once
-      // today's realized drawdown reaches 20% of the platform's own daily
-      // limit -- an early heads-up well before the account is actually at
-      // risk of breaching it.
-      A_DrawdownWarning: isDrawdownWarning(l.MaxDailyDrawdown, l.TodayDrawdown, alarmThresholdPct),
+      A_MaxDrawdownAmount: l.MaxDrawdownAmount || "",
+      A_MaxDrawdownPct: l.MaxDrawdownPct || "",
+      A_CurrentValueAmount: l.CurrentValueAmount || "",
+      A_CurrentValuePct: l.CurrentValuePct || "",
+      // Flags the Max Daily DD/Cur Daily DD cells for a visual warning once
+      // today's realized drawdown reaches the configured % of the
+      // platform's own daily limit -- an early heads-up well before the
+      // account is actually at risk of breaching it.
+      A_DailyDrawdownWarning: isDrawdownRatioWarning(l.MaxDailyDrawdown, l.TodayDrawdown, warningDailyDrawdownPct),
+      // Same idea, but for the contest-wide Max DD/Cur DD cells -- flags
+      // once cumulative drawdown reaches the configured % of the overall
+      // (not just daily) drawdown limit.
+      A_MaxDrawdownWarning: isDrawdownRatioWarning(l.MaxDrawdownAmount, l.CurrentValueAmount, warningDrawdownPct),
       A_PositionPL: l.PositionPL,
-      SL: ruleTarget && ruleTarget.stopLoss !== null ? ruleTarget.stopLoss : "",
-      TP: ruleTarget && ruleTarget.takeProfit !== null ? ruleTarget.takeProfit : "",
       Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
       B_AccountID: r ? r.AccountID : "",
@@ -299,11 +316,16 @@ function normSymbol(s) {
   return (s || "").trim().toUpperCase()
 }
 
-function isDrawdownWarning(maxDailyDrawdown, todayDrawdown, thresholdPct) {
-  const max = toNumber(maxDailyDrawdown)
-  const today = toNumber(todayDrawdown)
-  if (max === null || today === null || max <= 0) return false
-  return today / max >= thresholdPct / 100
+// Shared by both A_DailyDrawdownWarning (Max Daily DD/Cur Daily DD, driven
+// by "Warning Daily Drawdown %") and A_MaxDrawdownWarning (contest-wide Max
+// DD/Cur DD, driven by "Warning Drawdown %") -- same ratio-vs-threshold
+// check, just fed each pair's own max/current amounts and its own
+// independently configurable threshold.
+function isDrawdownRatioWarning(maxAmount, currentAmount, thresholdPct) {
+  const max = toNumber(maxAmount)
+  const current = toNumber(currentAmount)
+  if (max === null || current === null || max <= 0) return false
+  return current / max >= thresholdPct / 100
 }
 
 export function formatMoney(value) {

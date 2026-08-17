@@ -3,76 +3,61 @@
         {
             "A-position": "RebelsFunding|RF-749-44029|USD/CAD",
             "match-B-position": "tastyfx|DTEN3|USD/CAD",
-            "Stoploss-Takeprofit": [-4000, 2000],
             "A-DailyDrawdown": -2000
         },
         {
             "A-position": "RebelsFunding|RF-205-43891|NZD/CHF",
-            "Stoploss-Takeprofit": [-1000, 500],
-            "A-DailyDrawdown": -500,
-            "Note": "1 way"
+            "Note": "1 way, ignore"
         },
         {
             "A-position": "RebelsFunding|42026425387055|EUR/CHF",
-            "Stoploss-Takeprofit": [-1000, 500],
-            "A-DailyDrawdown": -500,
-            "Note": "1 way"
+            "Note": "1 way, ignore"
         },
         {
             "A-position": "RebelsFunding|42026424057054|NZD/CAD",
             "match-B-position": "tastyfx|DTEN3|NZD/CAD",
-            "Stoploss-Takeprofit": [-4000, 900],
             "A-DailyDrawdown": -2000
         },
         {
             "A-position": "RebelsFunding|12026404876211|GBP/CHF",
-            "Stoploss-Takeprofit": [-1000, 500],
             "A-DailyDrawdown": -500,
             "Note": "1 way"
         },
         {
             "A-position": "RebelsFunding|RCF-407-42579|EUR/CHF",
-            "Stoploss-Takeprofit": [-1000, 500],
-            "A-DailyDrawdown": -500,
-            "Note": "fund-1 way"
+            "Note": "1 way, ignore"
         },
         {
             "A-position": "FTMO|650005965|AUD/CHF",
-            "Stoploss-Takeprofit": [-1000, 1000],
             "A-DailyDrawdown": -500,
             "Note": "win, review 2 days"
         },
         {
             "A-position": "RebelsFunding|RF-029-45036|GBP/CHF",
             "match-B-position": "tastyfx|DTEN3|GBP/CHF",
-            "Stoploss-Takeprofit": [-4000, 2000],
             "A-DailyDrawdown": -2000
         },
         {
             "A-position": "RebelsFunding|22026427572022|EUR/GBP",
             "match-B-position": "tastyfx|DTEN3|EUR/GBP",
-            "Stoploss-Takeprofit": [-1000, 800],
             "A-DailyDrawdown": -500,
             "Note": "carpet"
         },
         {
             "A-position": "AlphaCapital|5103701|AUD/CHF",
             "match-B-position": "tastyfx|DTEN3|AUD/CHF",
-            "Stoploss-Takeprofit": [-800, 500],
             "A-DailyDrawdown": -400,
             "Note": "Fail: DD"
         },
         {
             "A-position": "RebelsFunding|RF-054-45234",
             "match-B-position": "tastyfx|DTEN3|CAD/CHF",
-            "Stoploss-Takeprofit": [-4000, 2000],
             "A-DailyDrawdown": -2000
         },
         {
             "A-position": "FTMO|650006975|AUD/USD",
             "match-B-position": "tastyfx|DTEN3|AUD/USD",
-            "Stoploss-Takeprofit": [-1000, 500],
-            "A-DailyDrawdown": -500
+            "Note": "Fund!!!"
         },
         {
             "A-position": "FTMO|n/a",
@@ -81,9 +66,12 @@
         {
             "A-position": "RebelsFunding|22026429113565|EUR/AUD",
             "match-B-position": "tastyfx|DTEN3|EUR/AUD",
-            "Stoploss-Takeprofit": [-4000, 3200],
             "A-DailyDrawdown": -2000,
             "Note": "new carpet"
+        },
+        {
+            "A-position": "RebelsFunding|22026429632526|USD/CAD",
+            "match-B-position": "tastyfx|DTEN3|USD/CAD"
         }
     ],
     "schedule-interval": "60m"

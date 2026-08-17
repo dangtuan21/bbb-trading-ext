@@ -209,6 +209,19 @@ async function fnClickTab(tabName) {
 }
 
 function fnParseAccounts(tabLabel) {
+  // Confirmed live (2026-08-15) that an account's status can be "Failed" (a
+  // challenge that breached its limits), not just Active/Inactive -- the
+  // account still has a real, visible "Details" button same as any other,
+  // so excluding it here desyncs tabIndex from fnClickDetailsAt's own count
+  // (which is status-agnostic, just every visible Details button). Every
+  // account listed AFTER a skipped one then gets clicked one index early,
+  // landing on the wrong account with no error -- the exact mechanism
+  // behind a real run's account-id-mismatch on three accounts in one scan.
+  // Declared inside the function, not at module scope -- this is an
+  // injected page function (see the comment above fnIsLoggedIn), so it
+  // only has access to its own local scope once serialized into the page.
+  const ACCOUNT_STATUS_VALUES = ['Active', 'Inactive', 'Failed', 'Passed', 'Breached', 'Closed', 'Pending'];
+
   function findContainerWithText(marker) {
     const articles = document.querySelectorAll('article');
     for (const el of articles) {
@@ -228,7 +241,7 @@ function fnParseAccounts(tabLabel) {
       i += 1;
       continue;
     }
-    if (i + 4 < lines.length && (lines[i + 1] === 'Active' || lines[i + 1] === 'Inactive')) {
+    if (i + 4 < lines.length && ACCOUNT_STATUS_VALUES.includes(lines[i + 1])) {
       accounts.push({
         account: lines[i],
         status: lines[i + 1],
@@ -292,10 +305,17 @@ function fnScrapeBalanceEquity(expectedAccountId) {
     return idx >= 0 && idx + 1 < lines.length ? lines[idx + 1] : '';
   }
   const bodyText = document.body.innerText || document.body.textContent || '';
+  const accountIdFound = expectedAccountId ? bodyText.includes(expectedAccountId) : null;
   return {
     balance: valueAfter('Balance'),
     equity: valueAfter('Equity'),
-    accountIdFound: expectedAccountId ? bodyText.includes(expectedAccountId) : null,
+    accountIdFound,
+    // Debug aid for account-id-mismatch: the existing "re-parse fresh right
+    // before clicking" fix still leaves a real mismatch rate (multiple
+    // accounts in one run, all exhausting every retry), so this is here to
+    // find out WHICH account actually got landed on instead of the
+    // requested one -- a first-line snapshot of whatever card is showing.
+    mismatchContext: accountIdFound === false ? lines.slice(0, 12) : null,
   };
 }
 
@@ -416,6 +436,11 @@ function fnScrapeContestStats() {
     const m = /-?\$?\s*[\d,]+(?:\.\d+)?/.exec(s);
     return m ? m[0].replace('$', '').replace(/,/g, '').trim() : '';
   }
+  function pctVal(s) {
+    if (!s) return '';
+    const m = /-?[\d,]+(?:\.\d+)?/.exec(s);
+    return m ? m[0].replace(/,/g, '').trim() : '';
+  }
   const text = document.body.innerText || document.body.textContent || '';
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
 
@@ -442,12 +467,50 @@ function fnScrapeContestStats() {
     if (maxDdIdx >= 0) maxDdContext = lines.slice(maxDdIdx, maxDdIdx + 8);
   }
 
+  // Contest-wide Max Drawdown / Current Value -- structurally the same
+  // 6-line block as Max Daily Drawdown / Today's Drawdown (label, "$
+  // amount", "N %", next label, amount, pct, all contiguous -- confirmed
+  // live for the daily pair). "Current Value" isn't a unique label on this
+  // page (Profit Target has its own "Current Value" row too), so this is
+  // read positionally right after "Max Drawdown" rather than searched for
+  // globally, which could match the wrong one. "Max Drawdown" itself can't
+  // collide with "Max Daily Drawdown" -- they diverge at the 6th
+  // character ("Max D[r]..." vs "Max D[a]ily...").
+  const maxDrawdownIdx = lines.findIndex((l) => l.startsWith('Max Drawdown'));
+  const maxDrawdownBlock = maxDrawdownIdx >= 0 ? lines.slice(maxDrawdownIdx, maxDrawdownIdx + 6) : [];
+  const currentValueLabelOk = (maxDrawdownBlock[3] || '').startsWith('Current Value');
+
+  // Profit Target -- same 6-line block shape as Max Drawdown/Current Value
+  // above (label, "$ amount", "N %", next label "Current Value", amount,
+  // pct -- this page has its own separate Profit Target/Current Value pair,
+  // distinct from the contest-wide Max Drawdown/Current Value pair handled
+  // above). Only the dollar amount is currently consumed (MainView's
+  // "A Target" column); the % is captured too since it's free from the same
+  // block read.
+  const profitTargetIdx = lines.findIndex((l) => l.startsWith('Profit Target'));
+  const profitTargetBlock = profitTargetIdx >= 0 ? lines.slice(profitTargetIdx, profitTargetIdx + 6) : [];
+
   return {
     initialBalance: moneyVal(valueAfterLabel('Initial Balance')),
     startingEquity: moneyVal(valueAfterLabel('Starting Equity')),
     maxDailyDrawdown: moneyVal(valueAfterLabel('Max Daily Drawdown')),
     todayDrawdown,
+    maxDrawdownAmount: moneyVal(maxDrawdownBlock[1]),
+    maxDrawdownPct: pctVal(maxDrawdownBlock[2]),
+    currentValueAmount: currentValueLabelOk ? moneyVal(maxDrawdownBlock[4]) : '',
+    currentValuePct: currentValueLabelOk ? pctVal(maxDrawdownBlock[5]) : '',
+    profitTarget: moneyVal(profitTargetBlock[1]),
+    profitTargetPct: pctVal(profitTargetBlock[2]),
     maxDdContext,
+    // Same debug aid as maxDdContext, but anchored on Max Drawdown -- fires
+    // whenever the positional read above didn't land on "Current Value" as
+    // expected, so the real block layout can be read off directly.
+    maxDrawdownContext: maxDrawdownIdx >= 0 && !currentValueLabelOk ? maxDrawdownBlock : null,
+    // Fires when "Profit Target" itself was never found on the page at
+    // all, so the raw surrounding text can be read off directly instead of
+    // guessed blind -- same debugging pattern as maxDdContext/
+    // maxDrawdownContext above.
+    profitTargetContext: profitTargetIdx < 0 ? lines.slice(0, 20) : null,
   };
 }
 
@@ -530,10 +593,17 @@ async function fnScrapePositions() {
     };
   }
 
+  // Confirmed live (2026-08-15) that the old ~4s budget (4 attempts x 1s)
+  // wasn't just occasionally tight -- it failed for EVERY position in a
+  // real scan, all four attempts exhausted, while the same account's UPL
+  // was already populated and stable on a normal (focused, long-open) tab
+  // moments later. Widened substantially rather than tweaked, since a
+  // systemic full-scan failure implies the real gap is bigger than a
+  // couple of seconds, not marginal.
   let result = scrapeOnce();
   let pollAttempts = 0;
-  while (result.anyNotReady && pollAttempts < 4) {
-    await sleep(1000);
+  while (result.anyNotReady && pollAttempts < 10) {
+    await sleep(1500);
     result = scrapeOnce();
     pollAttempts += 1;
   }
@@ -618,7 +688,10 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
   await sleep(1500);
   await execInFrame(tabId, targetFrameId, fnDismissModals).catch(() => {});
   const contestStats = await execInFrame(tabId, targetFrameId, fnScrapeContestStats).catch(() => ({
-    initialBalance: '', startingEquity: '', maxDailyDrawdown: '', todayDrawdown: '', maxDdContext: null,
+    initialBalance: '', startingEquity: '', maxDailyDrawdown: '', todayDrawdown: '',
+    maxDrawdownAmount: '', maxDrawdownPct: '', currentValueAmount: '', currentValuePct: '',
+    profitTarget: '', profitTargetPct: '',
+    maxDdContext: null, maxDrawdownContext: null, profitTargetContext: null,
   }));
 
   const clickResult = await execInFrame(tabId, targetFrameId, fnClickPositionsTab).catch(() => null);
@@ -638,6 +711,12 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
     startingEquity: contestStats.startingEquity || '',
     maxDailyDrawdown: contestStats.maxDailyDrawdown || '',
     todayDrawdown: contestStats.todayDrawdown || '',
+    maxDrawdownAmount: contestStats.maxDrawdownAmount || '',
+    maxDrawdownPct: contestStats.maxDrawdownPct || '',
+    currentValueAmount: contestStats.currentValueAmount || '',
+    currentValuePct: contestStats.currentValuePct || '',
+    profitTarget: contestStats.profitTarget || '',
+    profitTargetPct: contestStats.profitTargetPct || '',
     diag: {
       targetFrameId,
       contestTabClickResult,
@@ -649,6 +728,8 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
       stillNotReady: scraped.anyNotReady,
       error: scraped.error,
       maxDdContext: contestStats.maxDdContext,
+      maxDrawdownContext: contestStats.maxDrawdownContext,
+      profitTargetContext: contestStats.profitTargetContext,
     },
   };
 }
@@ -667,6 +748,8 @@ async function scrapeAccount(scanTabId, acc) {
   // render than the default tab's did.
   let details = null;
   let tabClickResult = null;
+  let lastFreshMatch = null;
+  let lastFreshAccountCount = null;
   const attempts = acc.tab ? 3 : 1;
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (acc.tab) {
@@ -689,6 +772,8 @@ async function scrapeAccount(scanTabId, acc) {
     // came first in DOM order no matter which account was requested.)
     const freshAccounts = await execInTab(scanTabId, fnParseAccounts, [acc.tab]);
     const freshMatch = (freshAccounts || []).find((a) => a.account === acc.account);
+    lastFreshMatch = freshMatch ? { account: freshMatch.account, tabIndex: freshMatch.tabIndex } : null;
+    lastFreshAccountCount = (freshAccounts || []).length;
     await execInTab(scanTabId, fnClickDetailsAt, [freshMatch ? freshMatch.tabIndex : acc.tabIndex]);
     // "Details" click is an in-app route change, not a real page load --
     // poll for the new content instead of assuming a fixed delay is enough.
@@ -713,7 +798,23 @@ async function scrapeAccount(scanTabId, acc) {
   if (details?.accountIdFound === false) {
     return {
       rows: [_blankRowForAccount(acc)],
-      diag: { reason: 'account-id-mismatch', expected: acc.account, balanceSeen: details?.balance, attempts, tabClickResult },
+      diag: {
+        reason: 'account-id-mismatch',
+        expected: acc.account,
+        balanceSeen: details?.balance,
+        attempts,
+        tabClickResult,
+        // Whether the LAST attempt's fresh re-parse (right before the
+        // click that landed here) actually found the expected account and
+        // resolved a tabIndex for it, plus how many accounts it saw total
+        // -- tells us whether fnClickDetailsAt clicked the index that
+        // fresh parse handed it (a click/DOM-indexing bug) or whether the
+        // fresh parse itself already failed to find/resolve the right
+        // account (a parsing or resort-timing bug further upstream).
+        lastFreshMatch,
+        lastFreshAccountCount,
+        mismatchContext: details?.mismatchContext,
+      },
     };
   }
   const balance = money(details?.balance || acc.balance);
@@ -725,6 +826,11 @@ async function scrapeAccount(scanTabId, acc) {
   let startingEquity = '';
   let maxDailyDrawdown = '';
   let todayDrawdown = '';
+  let maxDrawdownAmount = '';
+  let maxDrawdownPct = '';
+  let currentValueAmount = '';
+  let currentValuePct = '';
+  let profitTarget = '';
   let diag = null;
   // waitForNewTab must start listening BEFORE the click, not after -- the
   // click's window.open() can fire (and the tabs.onCreated event with it)
@@ -758,6 +864,11 @@ async function scrapeAccount(scanTabId, acc) {
         if (result.startingEquity) startingEquity = result.startingEquity;
         if (result.maxDailyDrawdown) maxDailyDrawdown = result.maxDailyDrawdown;
         if (result.todayDrawdown) todayDrawdown = result.todayDrawdown;
+        if (result.maxDrawdownAmount) maxDrawdownAmount = result.maxDrawdownAmount;
+        if (result.maxDrawdownPct) maxDrawdownPct = result.maxDrawdownPct;
+        if (result.currentValueAmount) currentValueAmount = result.currentValueAmount;
+        if (result.currentValuePct) currentValuePct = result.currentValuePct;
+        if (result.profitTarget) profitTarget = result.profitTarget;
       } finally {
         // Awaited (not fire-and-forget) so the next account's flow can't
         // start while this tab is still mid-close.
@@ -788,6 +899,11 @@ async function scrapeAccount(scanTabId, acc) {
     StartingEquity: startingEquity,
     MaxDailyDrawdown: maxDailyDrawdown,
     TodayDrawdown: todayDrawdown,
+    MaxDrawdownAmount: maxDrawdownAmount,
+    MaxDrawdownPct: maxDrawdownPct,
+    CurrentValueAmount: currentValueAmount,
+    CurrentValuePct: currentValuePct,
+    ProfitTarget: profitTarget,
   };
 
   if (!positions.length) {
@@ -823,6 +939,7 @@ function _blankRowForAccount(acc) {
     SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
     AccountLabel: acc.program, IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
     InitialBalance: '', StartingEquity: '', MaxDailyDrawdown: '', TodayDrawdown: '',
+    MaxDrawdownAmount: '', MaxDrawdownPct: '', CurrentValueAmount: '', CurrentValuePct: '',
     PosID: '', Symbol: '', Direction: '', Size: '', SizeUnit: '', Opening: '', Latest: '',
     StopLoss: '', TakeProfit: '', PositionPL: '',
   };
@@ -831,8 +948,18 @@ function _blankRowForAccount(acc) {
 async function runFullScan() {
   await chrome.storage.local.set({ scanStatus: 'running', lastScanError: null });
 
+  // Confirmed live (2026-08-15) that focused: false wasn't just a minor
+  // slowdown -- 5/6 accounts in a real scan NEVER got a live UPL reading
+  // even after widening the poll budget from ~4s to ~15s (every retry
+  // exhausted, no partial progress), while the one account that DID
+  // succeed did so instantly (no retries needed at all). That all-or-
+  // nothing pattern means more waiting wasn't the fix; RF-Trader's live
+  // price feed likely needs real focus to connect/update promptly, so this
+  // trades the original "don't steal the user's foreground" goal for
+  // actually getting real P&L data -- the window closing at scan end
+  // should return focus to whatever was active before.
   const win = await chrome.windows.create({
-    url: REBELSFUNDING_URL, type: 'normal', width: SCAN_WINDOW.width, height: SCAN_WINDOW.height, focused: false,
+    url: REBELSFUNDING_URL, type: 'normal', width: SCAN_WINDOW.width, height: SCAN_WINDOW.height, focused: true,
   });
   const [scanTab] = await chrome.tabs.query({ windowId: win.id });
   const scanTabId = scanTab.id;

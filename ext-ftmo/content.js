@@ -16,6 +16,13 @@ const LABEL_VARIANTS = {
   balance: ['Balance', 'Account Balance', 'Starting Balance'],
   equity: ['Equity', 'Current Equity', 'Account Equity'],
   pl: ['Unrealized PnL', 'Unrealized P/L', 'P&L', 'P/L', 'Profit', 'Total P&L', 'Account P&L'],
+  // Same CSV columns RebelsFunding's Contest stats tab already feeds
+  // (MaxDailyDrawdown/TodayDrawdown -- "Max Daily DD"/"Cur Daily DD" in
+  // MainView) -- FTMO's own "Today's permitted loss"/"Today's profit"
+  // cards are this account's equivalent figures. Both apostrophe forms
+  // covered defensively, same as this file's other multi-variant labels.
+  maxDailyDrawdown: ["Today's permitted loss", "Today’s permitted loss", 'Todays permitted loss'],
+  todayDrawdown: ["Today's profit", "Today’s profit", 'Todays profit'],
 };
 
 const ORDER_ID_RE = /^\d{5,}$/;
@@ -32,6 +39,22 @@ function valueAfterAny(lines, labels) {
   for (const label of labels) {
     const idx = lines.indexOf(label);
     if (idx >= 0 && idx + 1 < lines.length) return lines[idx + 1];
+  }
+  return '';
+}
+
+// "Max Loss: -$1,000" (an Objectives-table link) -- unlike Balance/Equity/
+// etc., the value is embedded directly in the label text itself, not on a
+// following line. Maps to the same MaxDrawdownAmount column ("Max DD" in
+// MainView) RebelsFunding's own overall Max Drawdown already feeds --
+// stored as a positive magnitude for consistency with that convention
+// (this label's own text is written negative, e.g. "-$1,000").
+function parseMaxLoss(lines) {
+  for (const line of lines) {
+    if (line.startsWith('Max Loss:')) {
+      const m = /-?\$?\s*([\d,]+(?:\.\d+)?)/.exec(line.slice('Max Loss:'.length));
+      if (m) return m[1].replace(/,/g, '');
+    }
   }
   return '';
 }
@@ -63,7 +86,10 @@ function parseAccountSummary(lines) {
   // LABEL_VARIANTS.pl) -- no Equity-Balance fallback if none of those
   // labels are found; left blank rather than derived.
   const accountPL = money(valueAfterAny(lines, LABEL_VARIANTS.pl));
-  return { balance, equity, accountPL };
+  const maxDailyDrawdown = money(valueAfterAny(lines, LABEL_VARIANTS.maxDailyDrawdown));
+  const todayDrawdown = money(valueAfterAny(lines, LABEL_VARIANTS.todayDrawdown));
+  const maxDrawdownAmount = parseMaxLoss(lines);
+  return { balance, equity, accountPL, maxDailyDrawdown, todayDrawdown, maxDrawdownAmount };
 }
 
 // Anchors on each Symbol match and searches a small window of nearby lines
@@ -164,6 +190,9 @@ function buildRows(summary, positions) {
     Balance: summary.balance,
     Equity: summary.equity,
     AccountPL: summary.accountPL,
+    MaxDailyDrawdown: summary.maxDailyDrawdown,
+    TodayDrawdown: summary.todayDrawdown,
+    MaxDrawdownAmount: summary.maxDrawdownAmount,
   };
 
   if (!positions.length) {
@@ -194,11 +223,22 @@ async function captureFtmoRows() {
     }
   }
 
-  const diag = !summary.balance
+  const balanceDiag = !summary.balance
     ? { reason: 'balance-not-found', scrolled, hasBalanceText: document.body.innerText.includes('Balance'), hasOpenTradesText: document.body.innerText.includes('Open trades'), url: location.href }
     : null;
 
-  return { rows: buildRows(summary, positions), diag };
+  // Debug aid: "Today's permitted loss"/"Today's profit"/"Max Loss:" are
+  // unconfirmed guesses at the real label text (from screenshots, not a
+  // live DOM check) -- if any doesn't match, surface every line that
+  // plausibly relates (the regex already covers "Max Loss:" too, via
+  // "loss") so the real label can be read off directly instead of guessed
+  // again blind, same approach that nailed down RebelsFunding's real
+  // "Today's Drawdown" label.
+  const drawdownDiag = !summary.maxDailyDrawdown || !summary.todayDrawdown || !summary.maxDrawdownAmount
+    ? { reason: 'drawdown-labels-not-found', nearbyLines: lines.filter((l) => /permitted|profit|loss/i.test(l)) }
+    : null;
+
+  return { rows: buildRows(summary, positions), diag: balanceDiag || drawdownDiag };
 }
 
 async function captureAndSend() {

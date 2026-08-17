@@ -31,8 +31,19 @@ function sideOf(key) {
  * `highlightIf(row)` (optional) flags a cell for a warning background --
  * evaluated per row, so it can key off other fields on that same row (e.g.
  * MainView's Max/Today Drawdown cells, flagged together off a single
- * precomputed row.A_DrawdownWarning rather than each column re-deriving the
- * ratio itself).
+ * precomputed row.A_DailyDrawdownWarning rather than each column
+ * re-deriving the ratio itself).
+ *
+ * `headerBg` (optional) overrides the header cell's default side-based
+ * background (SIDE_HEADER_BG) -- for visually grouping a specific pair/set
+ * of columns as related regardless of which side they're on, independent
+ * of highlightIf's per-row warning state.
+ *
+ * `columnBg` (optional) tints every body cell in the column with a constant
+ * background, all the time -- not conditional like highlightIf. When both
+ * are set on the same column, a highlightIf-triggered cell uses a stronger
+ * shade (bg-amber-200) instead of the baseline columnBg tint, so the
+ * warning state still stands out above the column's own resting color.
  */
 export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick }) {
   if (!rows.length) {
@@ -64,9 +75,9 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
             {cols.map((col) => (
               <th
                 key={col.key}
-                className={`whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide ${
+                className={`whitespace-nowrap px-3 py-2 text-xs font-semibold tracking-wide ${
                   col.numeric ? "text-right" : "text-left"
-                } ${SIDE_HEADER_BG[sideOf(col.key)] ?? ""}`}
+                } ${col.headerBg ?? SIDE_HEADER_BG[sideOf(col.key)] ?? ""}`}
               >
                 {col.label}
               </th>
@@ -84,14 +95,13 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                 const raw = row[col.key]
                 const isNegative = col.money && parseFloat(raw) < 0
                 const isHighlighted = col.highlightIf && col.highlightIf(row)
+                const cellBg = isHighlighted ? "bg-amber-200" : col.columnBg ?? ""
                 return (
                   <td
                     key={col.key}
                     className={`whitespace-nowrap px-3 py-2 ${
                       col.numeric ? "text-right tabular-nums" : "text-left"
-                    } ${isHighlighted ? "bg-amber-100" : ""} ${
-                      isNegative ? "text-red-600" : "text-slate-700"
-                    }`}
+                    } ${cellBg} ${isNegative ? "text-red-600" : "text-slate-700"}`}
                   >
                     {col.money ? formatMoney(raw) : raw}
                   </td>

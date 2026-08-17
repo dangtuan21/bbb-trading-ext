@@ -8,51 +8,54 @@ const SERVER_URL = "http://127.0.0.1:8765"
  * null means no rule matched at all, in which case this only ever appends).
  *
  * "Save" replaces the matched rule in place (via originalASymbol, so the
- * server can find it even if the Symbol field itself changed). "Save as New
- * Rule" always appends instead, regardless of what was matched -- how you
- * add a symbol-specific override alongside an existing blanket rule for the
- * same account (or vice versa) without touching the original.
+ * server can find it even if the Symbol field itself changed).
+ *
+ * Stop Loss/Take Profit are no longer part of this form or the underlying
+ * rule shape at all (dropped from MainView, compute.js, matchRules.js, and
+ * server.js's applyRuleEdit) -- config.json's rules no longer carry a
+ * "Stoploss-Takeprofit" field.
  */
 export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
   const hasExistingRule = row._rule !== null
   const originalASymbol = hasExistingRule ? row._rule.aSymbol : null
 
-  const [symbol, setSymbol] = useState(hasExistingRule ? row._rule.aSymbol ?? "" : "")
+  // Read-only, always reflects whatever's actually open right now
+  // (row.A_Symbol, the same value MainView's "A Symbol" column shows) --
+  // no longer editable, and no longer initialized from the existing rule's
+  // own aSymbol, so the rule this form saves always tracks the live
+  // position rather than something the user typed in once.
+  const symbol = row.A_Symbol && row.A_Symbol !== "n/a" ? row.A_Symbol : ""
   const [bKey, setBKey] = useState(
     hasExistingRule && row._rule.bPlatform
       ? `${row._rule.bPlatform}|${row._rule.bAccountId}|${row._rule.bSymbol}`
       : ""
   )
-  const [sl, setSl] = useState(row.SL ?? "")
-  const [tp, setTp] = useState(row.TP ?? "")
   const [note, setNote] = useState(row.Note ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  function buildPayload(asNew) {
+  function buildPayload() {
     const bParts = bKey ? bKey.split("|") : null
     return {
       aPlatform: row.A_Platform,
       aAccountId: row.A_AccountID,
       aSymbol: symbol.trim() || null,
-      ...(asNew ? {} : { originalASymbol }),
+      originalASymbol,
       bPlatform: bParts ? bParts[0] : null,
       bAccountId: bParts ? bParts[1] : null,
       bSymbol: bParts ? bParts[2] : null,
-      stopLoss: sl === "" ? null : Number(sl),
-      takeProfit: tp === "" ? null : Number(tp),
       note: note.trim() || null,
     }
   }
 
-  async function handleSave(asNew) {
+  async function handleSave() {
     setSaving(true)
     setError(null)
     try {
       const res = await fetch(`${SERVER_URL}/config/rule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload(asNew)),
+        body: JSON.stringify(buildPayload()),
       })
       const result = await res.json()
       if (!result.ok) throw new Error(result.error || "Server rejected the update")
@@ -78,20 +81,13 @@ export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
         </p>
 
         <label className="mb-3 block text-sm">
-          <span className="mb-1 block font-medium text-slate-600">Symbol (optional)</span>
+          <span className="mb-1 block font-medium text-slate-600">Symbol</span>
           <input
             type="text"
-            list="rule-open-symbols"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            placeholder="Any symbol (blanket rule)"
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            value={symbol || "(none open)"}
+            readOnly
+            className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-500"
           />
-          <datalist id="rule-open-symbols">
-            {row._openSymbols.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
         </label>
 
         <label className="mb-3 block text-sm">
@@ -112,27 +108,6 @@ export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
             })}
           </select>
         </label>
-
-        <div className="mb-3 grid grid-cols-2 gap-3">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-600">Stop Loss</span>
-            <input
-              type="number"
-              value={sl}
-              onChange={(e) => setSl(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-600">Take Profit</span>
-            <input
-              type="number"
-              value={tp}
-              onChange={(e) => setTp(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-            />
-          </label>
-        </div>
 
         <label className="mb-4 block text-sm">
           <span className="mb-1 block font-medium text-slate-600">Note (optional)</span>
@@ -155,19 +130,9 @@ export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
           >
             Cancel
           </button>
-          {hasExistingRule && (
-            <button
-              type="button"
-              onClick={() => handleSave(true)}
-              disabled={saving}
-              className="rounded-md border border-indigo-600 px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50"
-            >
-              Save as New Rule
-            </button>
-          )}
           <button
             type="button"
-            onClick={() => handleSave(false)}
+            onClick={handleSave}
             disabled={saving}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
           >

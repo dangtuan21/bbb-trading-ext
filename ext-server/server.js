@@ -64,13 +64,16 @@ function fmt2(n) {
 
 // Union of every platform's columns. tastyfx doesn't have a concept of
 // IsRealMoney -- its rows just leave that field blank. InitialBalance/
-// StartingEquity/MaxDailyDrawdown/TodayDrawdown are RebelsFunding-only (from
-// RF-Trader's "Contest stats" tab) -- every other platform leaves them blank
-// too.
+// StartingEquity/MaxDailyDrawdown/TodayDrawdown/MaxDrawdownAmount/
+// MaxDrawdownPct/CurrentValueAmount/CurrentValuePct/ProfitTarget are
+// RebelsFunding-only (from RF-Trader's "Contest stats" tab) -- every other
+// platform leaves them blank too.
 const HEADER = [
   'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
   'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'TodayDrawdown',
+  'MaxDrawdownAmount', 'MaxDrawdownPct', 'CurrentValueAmount', 'CurrentValuePct',
+  'ProfitTarget',
   'PosID', 'Symbol', 'Direction', 'Size', 'SizeUnit',
   'Opening', 'Latest', 'StopLoss', 'TakeProfit', 'PositionPL',
 ];
@@ -256,12 +259,6 @@ function applyRuleEdit(payload) {
   if (payload.bPlatform && payload.bAccountId && payload.bSymbol) {
     entry['match-B-position'] = `${payload.bPlatform}|${payload.bAccountId}|${payload.bSymbol}`;
   }
-  if (typeof payload.stopLoss === 'number' || typeof payload.takeProfit === 'number') {
-    entry['Stoploss-Takeprofit'] = [
-      typeof payload.stopLoss === 'number' ? payload.stopLoss : null,
-      typeof payload.takeProfit === 'number' ? payload.takeProfit : null,
-    ];
-  }
   if (typeof payload.dailyDrawdown === 'number') {
     entry['A-DailyDrawdown'] = payload.dailyDrawdown;
   }
@@ -282,12 +279,12 @@ function applyRuleEdit(payload) {
   fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
 }
 
-// JSON.stringify(_, null, 4) explodes every array (including
-// Stoploss-Takeprofit's 2 numbers) onto its own lines, which would turn a
-// one-rule edit into a diff touching every rule in the file -- the opposite
-// of the point of writing straight to the checked-in file. Collapses just
-// the short number-only arrays back onto one line after the fact; nothing
-// else in this file's shape (strings, objects) needs the same treatment.
+// JSON.stringify(_, null, 4) explodes every array onto its own lines, which
+// would turn a one-rule edit into a diff touching every rule in the file --
+// the opposite of the point of writing straight to the checked-in file.
+// Collapses short number-only arrays back onto one line after the fact.
+// Nothing in the current rule shape uses an array anymore, but this stays
+// generic/harmless in case a future field does.
 function formatConfigJson(obj) {
   const json = JSON.stringify(obj, null, 4);
   return json.replace(/\[\n\s*(-?\d+(?:\.\d+)?(?:,\n\s*-?\d+(?:\.\d+)?)*)\n\s*\]/g, (_match, nums) => {

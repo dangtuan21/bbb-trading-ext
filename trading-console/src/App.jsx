@@ -8,7 +8,7 @@ import { useRelativeTime } from "./lib/relativeTime"
 import { computeAccountLog, computeMainView } from "./lib/compute"
 import { matchRules } from "./lib/matchRules"
 import { POSITIONLOG_FIELDS } from "./lib/schema"
-import { useAlarmThreshold } from "./lib/settings"
+import { useWarningDailyDrawdownThreshold, useWarningDrawdownThreshold } from "./lib/settings"
 
 const ACCOUNTLOG_COLUMNS = [
   "Platform",
@@ -36,14 +36,15 @@ const MAINVIEW_COLUMNS = [
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
   { key: "A_Equity", label: "A Equity", money: true },
-  { key: "A_MaxDailyDrawdown", label: "Max Daily DD", money: true, highlightIf: (row) => row.A_DrawdownWarning },
-  { key: "A_TodayDrawdown", label: "Today's DD", money: true, highlightIf: (row) => row.A_DrawdownWarning },
+  { key: "A_ProfitTarget", label: "A Target", money: true },
+  { key: "A_MaxDailyDrawdown", label: "Max Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
+  { key: "A_TodayDrawdown", label: "Cur Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
+  { key: "A_MaxDrawdownAmount", label: "Max DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
+  { key: "A_CurrentValueAmount", label: "Cur DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
   { key: "A_PositionPL", label: "A P&L", money: true },
   { key: "B_SymbolPL", label: "B P&L", money: true },
   { key: "B_TotalSize", label: "B Size", numeric: true },
   { key: "B_Platform", label: "B Platform" },
-  { key: "TP", label: "TP", numeric: true },
-  { key: "SL", label: "SL", numeric: true },
   { key: "Note", label: "Note" },
 ]
 
@@ -51,12 +52,13 @@ export default function App() {
   const [active, setActive] = useState("mainview")
   const { rows, status, error, updatedAt } = usePositionLog()
   const relativeUpdatedAt = useRelativeTime(updatedAt)
-  const [alarmThresholdPct, setAlarmThresholdPct] = useAlarmThreshold()
+  const [warningDailyDrawdownPct, setWarningDailyDrawdownPct] = useWarningDailyDrawdownThreshold()
+  const [warningDrawdownPct, setWarningDrawdownPct] = useWarningDrawdownThreshold()
 
   const accountLogRows = useMemo(() => computeAccountLog(rows), [rows])
   const mainView = useMemo(
-    () => computeMainView(rows, matchRules, alarmThresholdPct),
-    [rows, alarmThresholdPct]
+    () => computeMainView(rows, matchRules, warningDailyDrawdownPct, warningDrawdownPct),
+    [rows, warningDailyDrawdownPct, warningDrawdownPct]
   )
 
   // Options for RuleEditForm's B-position dropdown -- every currently-known
@@ -92,7 +94,12 @@ export default function App() {
         </header>
 
         {active === "settings" && (
-          <SettingsPage alarmThresholdPct={alarmThresholdPct} onChange={setAlarmThresholdPct} />
+          <SettingsPage
+            warningDailyDrawdownPct={warningDailyDrawdownPct}
+            onWarningDailyDrawdownChange={setWarningDailyDrawdownPct}
+            warningDrawdownPct={warningDrawdownPct}
+            onWarningDrawdownChange={setWarningDrawdownPct}
+          />
         )}
 
         {active !== "settings" && status === "loading" && (

@@ -12,7 +12,6 @@ import configData from "../data-fact/config.json"
  *       {
  *         "A-position": "A_Platform|A_AccountID|A_Symbol",
  *         "match-B-position": "B_Platform|B_AccountID|B_Symbol",
- *         "Stoploss-Takeprofit": [-100, 100],
  *         "A-DailyDrawdown": -500,
  *         "Note": "free-text, optional"
  *       },
@@ -21,10 +20,9 @@ import configData from "../data-fact/config.json"
  *     "schedule-interval": "60m"
  *   }
  *
- * "match-B-position" is optional -- an entry with only "A-position" and
- * "Stoploss-Takeprofit" is a valid rule too, it just has no B-side pairing
- * (B_ columns stay blank in MainView, same as an unmatched rule), while
- * still carrying its SL/TP through to that A-side row.
+ * "match-B-position" is optional -- an entry with only "A-position" is a
+ * valid rule too, it just has no B-side pairing (B_ columns stay blank in
+ * MainView, same as an unmatched rule).
  *
  * "A-position"'s Symbol segment is optional too -- "A_Platform|A_AccountID"
  * (2 fields) is a blanket rule that applies to the account regardless of
@@ -59,17 +57,13 @@ export function parseMatchRules(json) {
       }
     }
 
-    const slTp = entry?.["Stoploss-Takeprofit"]
-    const stopLoss = Array.isArray(slTp) && typeof slTp[0] === "number" ? slTp[0] : null
-    const takeProfit = Array.isArray(slTp) && typeof slTp[1] === "number" ? slTp[1] : null
-
     const dd = entry?.["A-DailyDrawdown"]
     const dailyDrawdown = typeof dd === "number" ? dd : null
 
     const noteVal = entry?.["Note"]
     const note = typeof noteVal === "string" && noteVal ? noteVal : null
 
-    rules.push({ aPlatform, aAccountId, aSymbol, bPlatform, bAccountId, bSymbol, stopLoss, takeProfit, dailyDrawdown, note })
+    rules.push({ aPlatform, aAccountId, aSymbol, bPlatform, bAccountId, bSymbol, dailyDrawdown, note })
   }
   return rules
 }

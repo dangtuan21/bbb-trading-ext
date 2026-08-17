@@ -14,6 +14,11 @@ export const POSITIONLOG_FIELDS = [
   "StartingEquity",
   "MaxDailyDrawdown",
   "TodayDrawdown",
+  "MaxDrawdownAmount",
+  "MaxDrawdownPct",
+  "CurrentValueAmount",
+  "CurrentValuePct",
+  "ProfitTarget",
   "PosID",
   "Symbol",
   "Direction",
@@ -34,6 +39,9 @@ export const MONEY_FIELDS = new Set([
   "StartingEquity",
   "MaxDailyDrawdown",
   "TodayDrawdown",
+  "MaxDrawdownAmount",
+  "CurrentValueAmount",
+  "ProfitTarget",
   "PositionPL",
 ])
 
@@ -47,4 +55,6 @@ export const NUMERIC_FIELDS = new Set([
   "StopLoss",
   "TakeProfit",
   "SymbolPL",
+  "MaxDrawdownPct",
+  "CurrentValuePct",
 ])
