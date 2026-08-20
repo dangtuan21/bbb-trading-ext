@@ -41,6 +41,8 @@ export default function SettingsPage({
   onWarningDailyDrawdownChange,
   warningDrawdownPct,
   onWarningDrawdownChange,
+  warningTargetProfitPct,
+  onWarningTargetProfitChange,
 }) {
   return (
     <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -56,6 +58,12 @@ export default function SettingsPage({
           label="Warning Drawdown %"
           value={warningDrawdownPct}
           onChange={onWarningDrawdownChange}
+        />
+        <ThresholdField
+          id="warning-target-profit-pct"
+          label="Warning Target Profit %"
+          value={warningTargetProfitPct}
+          onChange={onWarningTargetProfitChange}
         />
       </div>
     </div>

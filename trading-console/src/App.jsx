@@ -8,7 +8,11 @@ import { useRelativeTime } from "./lib/relativeTime"
 import { computeAccountLog, computeMainView } from "./lib/compute"
 import { matchRules } from "./lib/matchRules"
 import { POSITIONLOG_FIELDS } from "./lib/schema"
-import { useWarningDailyDrawdownThreshold, useWarningDrawdownThreshold } from "./lib/settings"
+import {
+  useWarningDailyDrawdownThreshold,
+  useWarningDrawdownThreshold,
+  useWarningTargetProfitThreshold,
+} from "./lib/settings"
 
 const ACCOUNTLOG_COLUMNS = [
   "Platform",
@@ -28,15 +32,30 @@ const ACCOUNTLOG_COLUMNS = [
 // B-side position from data-fact/config.json (B columns). A row with no
 // rule, or whose rule's target isn't present in the current data, still
 // shows -- the B_ columns are just left blank.
+//
+// "A Account ID" is the only clickable cell (link: true, see DataTable) --
+// clicking it opens the edit-position modal (RuleEditForm) for that row.
+//
+// A_TargetEquity ("A Target Equity") = InitialBalance + A_ProfitTarget
+// ("A Target PL") -- the account's equity once it hits its profit target,
+// computed in computeMainView. Placed next to A_Equity (its "current"
+// counterpart) the same way A_ProfitTarget sits next to A_AccountPL, but
+// with its own violet background and its own warning flag
+// (A_EquityTargetWarning, fired when Equity reaches Warning Target Profit %
+// of TargetEquity) so the two pairs stay visually and logically distinct.
+// A_EquityPct ("A Equity %") = A_Equity / A_TargetEquity as a percentage --
+// same violet group/warning, shown right after A_Equity.
 const MAINVIEW_COLUMNS = [
   { key: "A_Platform", label: "A Platform" },
-  { key: "A_AccountID", label: "A Account ID" },
-  { key: "A_AccountPL", label: "A Account PL", money: true },
+  { key: "A_AccountID", label: "A Account ID", link: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
-  { key: "A_Equity", label: "A Equity", money: true },
-  { key: "A_ProfitTarget", label: "A Target", money: true },
+  { key: "A_TargetEquity", label: "A Target Equity", money: true, highlightIf: (row) => row.A_EquityTargetWarning, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_Equity", label: "A Equity", money: true, highlightIf: (row) => row.A_EquityTargetWarning, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_EquityPct", label: "A Equity %", numeric: true, pct: true, highlightIf: (row) => row.A_EquityTargetWarning, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_ProfitTarget", label: "A Target PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
+  { key: "A_AccountPL", label: "A Account PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "A_MaxDailyDrawdown", label: "Max Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
   { key: "A_TodayDrawdown", label: "Cur Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
   { key: "A_MaxDrawdownAmount", label: "Max DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
@@ -54,11 +73,12 @@ export default function App() {
   const relativeUpdatedAt = useRelativeTime(updatedAt)
   const [warningDailyDrawdownPct, setWarningDailyDrawdownPct] = useWarningDailyDrawdownThreshold()
   const [warningDrawdownPct, setWarningDrawdownPct] = useWarningDrawdownThreshold()
+  const [warningTargetProfitPct, setWarningTargetProfitPct] = useWarningTargetProfitThreshold()
 
   const accountLogRows = useMemo(() => computeAccountLog(rows), [rows])
   const mainView = useMemo(
-    () => computeMainView(rows, matchRules, warningDailyDrawdownPct, warningDrawdownPct),
-    [rows, warningDailyDrawdownPct, warningDrawdownPct]
+    () => computeMainView(rows, matchRules, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct),
+    [rows, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct]
   )
 
   // Options for RuleEditForm's B-position dropdown -- every currently-known
@@ -99,6 +119,8 @@ export default function App() {
             onWarningDailyDrawdownChange={setWarningDailyDrawdownPct}
             warningDrawdownPct={warningDrawdownPct}
             onWarningDrawdownChange={setWarningDrawdownPct}
+            warningTargetProfitPct={warningTargetProfitPct}
+            onWarningTargetProfitChange={setWarningTargetProfitPct}
           />
         )}
 

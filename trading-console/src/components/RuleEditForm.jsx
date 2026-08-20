@@ -3,7 +3,8 @@ import { useState } from "react"
 const SERVER_URL = "http://127.0.0.1:8765"
 
 /**
- * MainView's rule editor. Opened by clicking an A-side row; edits the rule
+ * MainView's rule editor (the "edit position" modal). Opened by clicking an
+ * A-side row's Account ID link; edits the rule
  * currently in effect for that row (row._rule, set by computeMainView --
  * null means no rule matched at all, in which case this only ever appends).
  *

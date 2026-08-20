@@ -39,9 +39,7 @@
         },
         {
             "A-position": "RebelsFunding|22026427572022|EUR/GBP",
-            "match-B-position": "tastyfx|DTEN3|EUR/GBP",
-            "A-DailyDrawdown": -500,
-            "Note": "carpet"
+            "match-B-position": "tastyfx|DTEN3|EUR/GBP"
         },
         {
             "A-position": "AlphaCapital|5103701|AUD/CHF",
@@ -50,28 +48,38 @@
             "Note": "Fail: DD"
         },
         {
-            "A-position": "RebelsFunding|RF-054-45234",
-            "match-B-position": "tastyfx|DTEN3|CAD/CHF",
-            "A-DailyDrawdown": -2000
+            "A-position": "RebelsFunding|RF-054-45234|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/CAD",
+            "Note": "!!!PL =+800"
         },
         {
-            "A-position": "FTMO|650006975|AUD/USD",
+            "A-position": "FTMO|650006975",
             "match-B-position": "tastyfx|DTEN3|AUD/USD",
-            "Note": "Fund!!!"
+            "Note": "Reviewing contract"
         },
         {
             "A-position": "FTMO|n/a",
-            "Note": "!!!need min days=+1"
+            "Note": "Not sufficient equity"
         },
         {
             "A-position": "RebelsFunding|22026429113565|EUR/AUD",
-            "match-B-position": "tastyfx|DTEN3|EUR/AUD",
-            "A-DailyDrawdown": -2000,
-            "Note": "new carpet"
+            "match-B-position": "tastyfx|DTEN3|EUR/AUD"
         },
         {
             "A-position": "RebelsFunding|22026429632526|USD/CAD",
             "match-B-position": "tastyfx|DTEN3|USD/CAD"
+        },
+        {
+            "A-position": "RebelsFunding|22026429641325|EUR/USD",
+            "match-B-position": "tastyfx|DTEN3|EUR/USD"
+        },
+        {
+            "A-position": "RebelsFunding|22026429775880|NZD/USD",
+            "match-B-position": "tastyfx|DTEN3|NZD/USD"
+        },
+        {
+            "A-position": "RebelsFunding|RF-325-46378|GBP/CAD",
+            "match-B-position": "tastyfx|DTEN3|GBP/CAD"
         }
     ],
     "schedule-interval": "60m"

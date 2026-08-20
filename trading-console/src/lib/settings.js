@@ -13,6 +13,13 @@ export const DEFAULT_WARNING_DAILY_DRAWDOWN_PCT = 20
 const DRAWDOWN_STORAGE_KEY = "warningDrawdownPct"
 export const DEFAULT_WARNING_DRAWDOWN_PCT = 20
 
+// "A Target PL"/"A Account PL" progress-toward-target warning threshold --
+// flags once current profit (AccountPL) reaches this % of the account's
+// Profit Target, an early heads-up that the account is closing in on
+// passing its challenge.
+const TARGET_PROFIT_STORAGE_KEY = "warningTargetProfitPct"
+export const DEFAULT_WARNING_TARGET_PROFIT_PCT = 80
+
 function readStoredThreshold(storageKey, fallback) {
   const raw = localStorage.getItem(storageKey)
   const n = raw === null ? NaN : Number(raw)
@@ -52,6 +59,24 @@ export function useWarningDrawdownThreshold() {
   function updateThreshold(next) {
     setThreshold(next)
     localStorage.setItem(DRAWDOWN_STORAGE_KEY, String(next))
+  }
+
+  return [threshold, updateThreshold]
+}
+
+/**
+ * MainView's "A Target PL"/"A Account PL" highlight threshold -- same
+ * shape/persistence as the other two above, just a distinct setting so it
+ * can be tuned independently.
+ */
+export function useWarningTargetProfitThreshold() {
+  const [threshold, setThreshold] = useState(() =>
+    readStoredThreshold(TARGET_PROFIT_STORAGE_KEY, DEFAULT_WARNING_TARGET_PROFIT_PCT)
+  )
+
+  function updateThreshold(next) {
+    setThreshold(next)
+    localStorage.setItem(TARGET_PROFIT_STORAGE_KEY, String(next))
   }
 
   return [threshold, updateThreshold]

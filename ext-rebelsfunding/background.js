@@ -485,7 +485,9 @@ function fnScrapeContestStats() {
   // pct -- this page has its own separate Profit Target/Current Value pair,
   // distinct from the contest-wide Max Drawdown/Current Value pair handled
   // above). Only the dollar amount is currently consumed (MainView's
-  // "A Target" column); the % is captured too since it's free from the same
+  // "A Target PL" column, also feeding "A Target Equity" =
+  // InitialBalance + A Target PL); the % is captured too since it's free
+  // from the same
   // block read.
   const profitTargetIdx = lines.findIndex((l) => l.startsWith('Profit Target'));
   const profitTargetBlock = profitTargetIdx >= 0 ? lines.slice(profitTargetIdx, profitTargetIdx + 6) : [];

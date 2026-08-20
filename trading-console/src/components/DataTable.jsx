@@ -1,5 +1,5 @@
 import { MONEY_FIELDS, NUMERIC_FIELDS } from "../lib/schema"
-import { formatMoney } from "../lib/compute"
+import { formatMoney, formatPct } from "../lib/compute"
 
 // MainView's joined columns are prefixed "A_"/"B_" -- give each side's
 // header cells a distinct background so the two blocks are visually easy
@@ -44,6 +44,18 @@ function sideOf(key) {
  * are set on the same column, a highlightIf-triggered cell uses a stronger
  * shade (bg-amber-200) instead of the baseline columnBg tint, so the
  * warning state still stands out above the column's own resting color.
+ *
+ * `link` (optional) renders that column's cell content as a clickable link
+ * instead of plain text -- clicking it calls `onRowClick(row)`, same
+ * callback a whole clickable row would use, just scoped to one column
+ * (e.g. MainView's "A Account ID", which opens the edit-position modal)
+ * instead of the entire row being clickable. Has no effect if `onRowClick`
+ * isn't passed.
+ *
+ * `pct` (optional) formats the cell via formatPct() -- rounds to the
+ * nearest whole number and appends "%" (e.g. 94.27 -> "94%"), for ratio
+ * columns like MainView's "A Equity %". Independent of `money`/`numeric`;
+ * a pct column should still set `numeric: true` for right-alignment.
  */
 export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick }) {
   if (!rows.length) {
@@ -86,16 +98,13 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">
           {rows.map((row, i) => (
-            <tr
-              key={i}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              className={`hover:bg-slate-50 ${onRowClick ? "cursor-pointer" : ""}`}
-            >
+            <tr key={i} className="hover:bg-slate-50">
               {cols.map((col) => {
                 const raw = row[col.key]
                 const isNegative = col.money && parseFloat(raw) < 0
                 const isHighlighted = col.highlightIf && col.highlightIf(row)
                 const cellBg = isHighlighted ? "bg-amber-200" : col.columnBg ?? ""
+                const content = col.money ? formatMoney(raw) : col.pct ? formatPct(raw) : raw
                 return (
                   <td
                     key={col.key}
@@ -103,7 +112,17 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                       col.numeric ? "text-right tabular-nums" : "text-left"
                     } ${cellBg} ${isNegative ? "text-red-600" : "text-slate-700"}`}
                   >
-                    {col.money ? formatMoney(raw) : raw}
+                    {col.link && onRowClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onRowClick(row)}
+                        className="text-indigo-600 underline decoration-dotted underline-offset-2 hover:text-indigo-800"
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      content
+                    )}
                   </td>
                 )
               })}

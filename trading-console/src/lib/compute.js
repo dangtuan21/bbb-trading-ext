@@ -1,7 +1,11 @@
 // Client-side roll-up of the raw PositionLog rows into an AccountLog view
 // (one row per Platform+AccountID+Symbol).
 
-import { DEFAULT_WARNING_DAILY_DRAWDOWN_PCT, DEFAULT_WARNING_DRAWDOWN_PCT } from "./settings"
+import {
+  DEFAULT_WARNING_DAILY_DRAWDOWN_PCT,
+  DEFAULT_WARNING_DRAWDOWN_PCT,
+  DEFAULT_WARNING_TARGET_PROFIT_PCT,
+} from "./settings"
 
 function toNumber(value) {
   const n = parseFloat(value)
@@ -85,7 +89,8 @@ export function computeMainView(
   rows,
   matchRules = [],
   warningDailyDrawdownPct = DEFAULT_WARNING_DAILY_DRAWDOWN_PCT,
-  warningDrawdownPct = DEFAULT_WARNING_DRAWDOWN_PCT
+  warningDrawdownPct = DEFAULT_WARNING_DRAWDOWN_PCT,
+  warningTargetProfitPct = DEFAULT_WARNING_TARGET_PROFIT_PCT
 ) {
   const leftGroups = new Map()
   for (const row of rows) {
@@ -101,6 +106,7 @@ export function computeMainView(
         Balance: row.Balance,
         Equity: row.Equity,
         AccountPL: row.AccountPL,
+        InitialBalance: row.InitialBalance,
         MaxDailyDrawdown: row.MaxDailyDrawdown,
         TodayDrawdown: row.TodayDrawdown,
         MaxDrawdownAmount: row.MaxDrawdownAmount,
@@ -130,6 +136,7 @@ export function computeMainView(
     Balance: g.Balance,
     Equity: g.Equity,
     AccountPL: g.AccountPL,
+    InitialBalance: g.InitialBalance,
     MaxDailyDrawdown: g.MaxDailyDrawdown,
     TodayDrawdown: g.TodayDrawdown,
     MaxDrawdownAmount: g.MaxDrawdownAmount,
@@ -259,6 +266,11 @@ export function computeMainView(
         }
       }
     }
+    // InitialBalance + A_ProfitTarget (A Target PL) -- the account's equity
+    // once it hits its profit target. Blank if either side is
+    // missing/non-numeric (e.g. no InitialBalance scraped yet). Computed
+    // ahead of the push below so it can also feed A_EquityTargetWarning.
+    const targetEquity = addMoney(l.InitialBalance, l.ProfitTarget)
     joined.push({
       A_Platform: l.Platform,
       A_AccountID: l.AccountID,
@@ -266,6 +278,12 @@ export function computeMainView(
       A_Balance: l.Balance,
       A_Equity: l.Equity,
       A_ProfitTarget: l.ProfitTarget || "",
+      A_TargetEquity: targetEquity,
+      // A_Equity / A_TargetEquity as a percentage -- how far current equity
+      // is toward the equity level the account will be at once it hits its
+      // profit target. Blank if either side is missing/non-numeric or
+      // A_TargetEquity is 0.
+      A_EquityPct: pctOf(l.Equity, targetEquity),
       A_AccountPL: l.AccountPL,
       A_Symbol: l.Symbol,
       A_Direction: l.Direction,
@@ -280,11 +298,22 @@ export function computeMainView(
       // today's realized drawdown reaches the configured % of the
       // platform's own daily limit -- an early heads-up well before the
       // account is actually at risk of breaching it.
-      A_DailyDrawdownWarning: isDrawdownRatioWarning(l.MaxDailyDrawdown, l.TodayDrawdown, warningDailyDrawdownPct),
+      A_DailyDrawdownWarning: isRatioWarning(l.MaxDailyDrawdown, l.TodayDrawdown, warningDailyDrawdownPct),
       // Same idea, but for the contest-wide Max DD/Cur DD cells -- flags
       // once cumulative drawdown reaches the configured % of the overall
       // (not just daily) drawdown limit.
-      A_MaxDrawdownWarning: isDrawdownRatioWarning(l.MaxDrawdownAmount, l.CurrentValueAmount, warningDrawdownPct),
+      A_MaxDrawdownWarning: isRatioWarning(l.MaxDrawdownAmount, l.CurrentValueAmount, warningDrawdownPct),
+      // Flags the A Target PL/A Account PL cells once current profit
+      // (AccountPL) reaches the configured % of the account's Profit
+      // Target -- an early heads-up that the account is closing in on
+      // passing its challenge. Same ratio check as the two drawdown
+      // warnings above, just applied to a "getting close to a goal"
+      // pairing instead of a "getting close to a limit" one.
+      A_TargetProfitWarning: isRatioWarning(l.ProfitTarget, l.AccountPL, warningTargetProfitPct),
+      // Same ratio check again, but for the A Target Equity/A Equity pair --
+      // flags once current equity reaches the configured % of the equity
+      // level the account will be at once it hits its profit target.
+      A_EquityTargetWarning: isRatioWarning(targetEquity, l.Equity, warningTargetProfitPct),
       A_PositionPL: l.PositionPL,
       Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
@@ -316,12 +345,27 @@ function normSymbol(s) {
   return (s || "").trim().toUpperCase()
 }
 
-// Shared by both A_DailyDrawdownWarning (Max Daily DD/Cur Daily DD, driven
-// by "Warning Daily Drawdown %") and A_MaxDrawdownWarning (contest-wide Max
-// DD/Cur DD, driven by "Warning Drawdown %") -- same ratio-vs-threshold
-// check, just fed each pair's own max/current amounts and its own
-// independently configurable threshold.
-function isDrawdownRatioWarning(maxAmount, currentAmount, thresholdPct) {
+// Shared by A_DailyDrawdownWarning (Max Daily DD/Cur Daily DD, driven by
+// "Warning Daily Drawdown %"), A_MaxDrawdownWarning (contest-wide Max
+// DD/Cur DD, driven by "Warning Drawdown %"), and A_TargetProfitWarning (A
+// Target/A Account PL, driven by "Warning Target Profit %") -- same
+// ratio-vs-threshold check, just fed each pair's own max/current amounts
+// and its own independently configurable threshold.
+function addMoney(a, b) {
+  const x = toNumber(a)
+  const y = toNumber(b)
+  if (x === null || y === null) return ""
+  return round2(x + y)
+}
+
+function pctOf(numerator, denominator) {
+  const n = toNumber(numerator)
+  const d = toNumber(denominator)
+  if (n === null || d === null || d === 0) return ""
+  return round2((n / d) * 100)
+}
+
+function isRatioWarning(maxAmount, currentAmount, thresholdPct) {
   const max = toNumber(maxAmount)
   const current = toNumber(currentAmount)
   if (max === null || current === null || max <= 0) return false
@@ -336,4 +380,13 @@ export function formatMoney(value) {
     maximumFractionDigits: 2,
   })
   return n < 0 ? `-${formatted}` : formatted
+}
+
+// Rounds to the nearest whole number and appends "%" -- e.g. 94.27 -> "94%".
+// Used for ratio columns like A_EquityPct where sub-percent precision isn't
+// useful at a glance.
+export function formatPct(value) {
+  const n = toNumber(value)
+  if (n === null) return value ?? ""
+  return `${Math.round(n)}%`
 }
