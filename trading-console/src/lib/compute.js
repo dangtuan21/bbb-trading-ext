@@ -268,9 +268,13 @@ export function computeMainView(
     }
     // InitialBalance + A_ProfitTarget (A Target PL) -- the account's equity
     // once it hits its profit target. Blank if either side is
-    // missing/non-numeric (e.g. no InitialBalance scraped yet). Computed
-    // ahead of the push below so it can also feed A_EquityTargetWarning.
+    // missing/non-numeric (e.g. no InitialBalance scraped yet).
     const targetEquity = addMoney(l.InitialBalance, l.ProfitTarget)
+    // (A_Equity - InitialBalance) / A_ProfitTarget as a percentage -- how
+    // much of the profit target has been realized so far. Blank if any side
+    // is missing/non-numeric or A_ProfitTarget is 0. Computed ahead of the
+    // push below so it can also feed A_PLPctWarning.
+    const plPct = pctOf(subMoney(l.Equity, l.InitialBalance), l.ProfitTarget)
     joined.push({
       A_Platform: l.Platform,
       A_AccountID: l.AccountID,
@@ -279,11 +283,7 @@ export function computeMainView(
       A_Equity: l.Equity,
       A_ProfitTarget: l.ProfitTarget || "",
       A_TargetEquity: targetEquity,
-      // A_Equity / A_TargetEquity as a percentage -- how far current equity
-      // is toward the equity level the account will be at once it hits its
-      // profit target. Blank if either side is missing/non-numeric or
-      // A_TargetEquity is 0.
-      A_EquityPct: pctOf(l.Equity, targetEquity),
+      A_PLPct: plPct,
       A_AccountPL: l.AccountPL,
       A_Symbol: l.Symbol,
       A_Direction: l.Direction,
@@ -310,10 +310,10 @@ export function computeMainView(
       // warnings above, just applied to a "getting close to a goal"
       // pairing instead of a "getting close to a limit" one.
       A_TargetProfitWarning: isRatioWarning(l.ProfitTarget, l.AccountPL, warningTargetProfitPct),
-      // Same ratio check again, but for the A Target Equity/A Equity pair --
-      // flags once current equity reaches the configured % of the equity
-      // level the account will be at once it hits its profit target.
-      A_EquityTargetWarning: isRatioWarning(targetEquity, l.Equity, warningTargetProfitPct),
+      // Flags just the A PL % cell once A_PLPct itself reaches the
+      // configured % -- a direct value-vs-threshold check (A_PLPct is
+      // already a percentage), unlike the ratio-of-two-amounts checks above.
+      A_PLPctWarning: isPctWarning(plPct, warningTargetProfitPct),
       A_PositionPL: l.PositionPL,
       Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
@@ -358,6 +358,13 @@ function addMoney(a, b) {
   return round2(x + y)
 }
 
+function subMoney(a, b) {
+  const x = toNumber(a)
+  const y = toNumber(b)
+  if (x === null || y === null) return ""
+  return round2(x - y)
+}
+
 function pctOf(numerator, denominator) {
   const n = toNumber(numerator)
   const d = toNumber(denominator)
@@ -372,6 +379,15 @@ function isRatioWarning(maxAmount, currentAmount, thresholdPct) {
   return current / max >= thresholdPct / 100
 }
 
+// Direct value-vs-threshold check for a value that's already a percentage
+// (e.g. A_PLPct), unlike isRatioWarning above which derives a ratio from two
+// raw amounts.
+function isPctWarning(pctValue, thresholdPct) {
+  const p = toNumber(pctValue)
+  if (p === null) return false
+  return p >= thresholdPct
+}
+
 export function formatMoney(value) {
   const n = toNumber(value)
   if (n === null) return value ?? ""
@@ -383,7 +399,7 @@ export function formatMoney(value) {
 }
 
 // Rounds to the nearest whole number and appends "%" -- e.g. 94.27 -> "94%".
-// Used for ratio columns like A_EquityPct where sub-percent precision isn't
+// Used for ratio columns like A_PLPct where sub-percent precision isn't
 // useful at a glance.
 export function formatPct(value) {
   const n = toNumber(value)

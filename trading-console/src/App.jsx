@@ -39,21 +39,23 @@ const ACCOUNTLOG_COLUMNS = [
 // A_TargetEquity ("A Target Equity") = InitialBalance + A_ProfitTarget
 // ("A Target PL") -- the account's equity once it hits its profit target,
 // computed in computeMainView. Placed next to A_Equity (its "current"
-// counterpart) the same way A_ProfitTarget sits next to A_AccountPL, but
-// with its own violet background and its own warning flag
-// (A_EquityTargetWarning, fired when Equity reaches Warning Target Profit %
-// of TargetEquity) so the two pairs stay visually and logically distinct.
-// A_EquityPct ("A Equity %") = A_Equity / A_TargetEquity as a percentage --
-// same violet group/warning, shown right after A_Equity.
+// counterpart) the same way A_ProfitTarget sits next to A_AccountPL, with
+// its own violet background; no highlightIf on either.
+// A_PLPct ("A PL %") = (A_Equity - A_InitialBalance) / A_ProfitTarget
+// ("A Target PL") as a percentage -- how much of the profit target has been
+// realized so far. Shown right after A_Equity, but plain (no background
+// styling of its own) -- just its warning flag (A_PLPctWarning, fired once
+// A_PLPct itself reaches Warning Target Profit %), same amber highlight as
+// every other warning column when triggered.
 const MAINVIEW_COLUMNS = [
   { key: "A_Platform", label: "A Platform" },
   { key: "A_AccountID", label: "A Account ID", link: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
-  { key: "A_TargetEquity", label: "A Target Equity", money: true, highlightIf: (row) => row.A_EquityTargetWarning, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
-  { key: "A_Equity", label: "A Equity", money: true, highlightIf: (row) => row.A_EquityTargetWarning, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
-  { key: "A_EquityPct", label: "A Equity %", numeric: true, pct: true, highlightIf: (row) => row.A_EquityTargetWarning, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_TargetEquity", label: "A Target Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_Equity", label: "A Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_PLPct", label: "A PL %", numeric: true, pct: true, highlightIf: (row) => row.A_PLPctWarning },
   { key: "A_ProfitTarget", label: "A Target PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "A_AccountPL", label: "A Account PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "A_MaxDailyDrawdown", label: "Max Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
