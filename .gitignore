@@ -8,6 +8,7 @@ node_modules/
 # balances, equity, and open positions, not just sample data.
 ext-server/*.csv
 trading-console/public/data/*.csv
+trading-console/public/data/positions.csv
 
 # Pushover credentials for the warning -> phone-notification feature -- see
 # ENV_FILE in ext-server/server.js. Copy ext-server/.env.example (checked
