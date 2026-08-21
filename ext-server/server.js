@@ -78,6 +78,13 @@ const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-console', 's
 //       "maxDrawdown": true,
 //       "targetPL": true,
 //       "plPct": true
+//     },
+//     "tiers": {        // optional -- multi-rung ladder per metric, overrides
+//                        // that metric's single "thresholds" value above.
+//                        // Notifies once per rung climbed through, not just
+//                        // once ever -- e.g. plPct at 80%, then again at 90%,
+//                        // 95%, 100% as it keeps climbing (see tierLadderFor).
+//       "plPct": [80, 90, 95, 100]
 //     }
 //   }
 const NOTIFY_CONFIG_FILE = path.join(__dirname, 'notify-config.json');
@@ -344,14 +351,19 @@ function formatConfigJson(obj) {
 // ---------------------------------------------------------------------------
 // Warning -> Pushover phone notifications.
 //
-// Fires once per false->true transition of each of the four warning flags
-// MainView highlights (see trading-console's compute.js: isRatioWarning /
-// isPctWarning) -- not on every /write while a warning stays active, so a
-// sustained breach doesn't re-buzz the phone every scrape cycle. The
-// true/false state is tracked in-memory only (warningState below), so it
-// resets on server restart -- a still-active warning will notify once more
+// Each of the four warning conditions MainView highlights (see
+// trading-console's compute.js) is checked against a "tier ladder" -- an
+// ascending list of percentages (e.g. plPct's default [80]) -- and fires
+// once each time the metric's current value climbs past a rung it hadn't
+// already passed, not on every /write while it stays at the same rung. A
+// metric with multiple rungs (set via notify-config.json's "tiers", e.g.
+// plPct: [80, 90, 95, 100]) re-notifies as it climbs through each one, so a
+// profit target you're closing in on keeps you posted instead of going
+// quiet after the first alert. The "highest rung already notified" state
+// is tracked in-memory only (tierState below), so it resets on server
+// restart -- a metric already past its first rung will notify once more
 // right after a restart. Acceptable for a personal local tool; if that ever
-// becomes annoying, persist warningState to a small JSON file the same way
+// becomes annoying, persist tierState to a small JSON file the same way
 // positions.csv is persisted.
 // ---------------------------------------------------------------------------
 
@@ -373,22 +385,22 @@ function toNum(value) {
   return Number.isNaN(n) ? null : n;
 }
 
-// Duplicated from trading-console's src/lib/compute.js (isRatioWarning /
-// isPctWarning) rather than imported -- that file is an ES module consumed
-// by the Vite frontend, this server is plain CommonJS. Keep both in sync by
-// hand if the warning math ever changes.
-function isRatioWarning(maxAmount, currentAmount, thresholdPct) {
+// Same ratio math as trading-console's src/lib/compute.js (isRatioWarning)
+// rather than imported -- that file is an ES module consumed by the Vite
+// frontend, this server is plain CommonJS. Keep both in sync by hand if the
+// warning math ever changes. Returns the raw percentage (not a boolean) so
+// checkWarningsAndNotify can compare it against a tier ladder rather than a
+// single threshold.
+function ratioPct(currentAmount, maxAmount) {
   const max = toNum(maxAmount);
   const current = toNum(currentAmount);
-  if (max === null || current === null || max <= 0) return false;
-  return current / max >= thresholdPct / 100;
+  if (max === null || current === null || max <= 0) return null;
+  return (current / max) * 100;
 }
 
 function ratioPctLabel(currentAmount, maxAmount) {
-  const max = toNum(maxAmount);
-  const current = toNum(currentAmount);
-  if (max === null || current === null || max <= 0) return 'n/a';
-  return `${Math.round((current / max) * 100)}%`;
+  const p = ratioPct(currentAmount, maxAmount);
+  return p === null ? 'n/a' : `${Math.round(p)}%`;
 }
 
 // A_PLPct from compute.js: (Equity - InitialBalance) / ProfitTarget, as a
@@ -406,6 +418,17 @@ function plPctFor(row) {
 // drawdown (risk) alerts default louder/more urgent than the two
 // profit-target (good news) ones. Toggle any of these off via
 // notify-config.json's "metrics" without touching this code.
+//
+// `value(row)` returns the metric's current percentage (or null if not
+// computable) -- checkWarningsAndNotify compares it against a tier ladder
+// (see tierLadderFor) rather than a single threshold, so a metric can climb
+// through several rungs (e.g. plPct at 80%, 90%, 95%, 100%) and notify once
+// per rung crossed, instead of only once ever. A metric with no "tiers"
+// override in notify-config.json just gets a single-rung ladder from
+// `thresholds[thresholdKey]`, which reproduces the old once-only behavior.
+//
+// `message(row, tierPct)` describes the specific rung just crossed --
+// tierPct is that rung's threshold (e.g. 90), not the metric's live value.
 const WARNING_METRICS = [
   {
     key: 'dailyDrawdown',
@@ -413,9 +436,9 @@ const WARNING_METRICS = [
     label: 'Daily Drawdown',
     priority: 1,
     sound: 'siren',
-    isWarning: (row, pct) => isRatioWarning(row.MaxDailyDrawdown, row.TodayDrawdown, pct),
-    message: (row, pct) =>
-      `Today's Drawdown $${row.TodayDrawdown} is ${ratioPctLabel(row.TodayDrawdown, row.MaxDailyDrawdown)} of Max Daily Drawdown $${row.MaxDailyDrawdown} (warns at ${pct}%).`,
+    value: (row) => ratioPct(row.TodayDrawdown, row.MaxDailyDrawdown),
+    message: (row, tierPct) =>
+      `Today's Drawdown $${row.TodayDrawdown} has crossed ${tierPct}% of Max Daily Drawdown $${row.MaxDailyDrawdown} (now ${ratioPctLabel(row.TodayDrawdown, row.MaxDailyDrawdown)}).`,
   },
   {
     key: 'maxDrawdown',
@@ -423,9 +446,9 @@ const WARNING_METRICS = [
     label: 'Max Drawdown',
     priority: 1,
     sound: 'siren',
-    isWarning: (row, pct) => isRatioWarning(row.MaxDrawdownAmount, row.CurrentValueAmount, pct),
-    message: (row, pct) =>
-      `Current Value $${row.CurrentValueAmount} is ${ratioPctLabel(row.CurrentValueAmount, row.MaxDrawdownAmount)} of Max Drawdown $${row.MaxDrawdownAmount} (warns at ${pct}%).`,
+    value: (row) => ratioPct(row.CurrentValueAmount, row.MaxDrawdownAmount),
+    message: (row, tierPct) =>
+      `Current Value $${row.CurrentValueAmount} has crossed ${tierPct}% of Max Drawdown $${row.MaxDrawdownAmount} (now ${ratioPctLabel(row.CurrentValueAmount, row.MaxDrawdownAmount)}).`,
   },
   {
     key: 'targetPL',
@@ -433,9 +456,9 @@ const WARNING_METRICS = [
     label: 'Target PL',
     priority: 0,
     sound: 'magic',
-    isWarning: (row, pct) => isRatioWarning(row.ProfitTarget, row.AccountPL, pct),
-    message: (row, pct) =>
-      `Account PL $${row.AccountPL} has reached ${ratioPctLabel(row.AccountPL, row.ProfitTarget)} of Profit Target $${row.ProfitTarget} (warns at ${pct}%).`,
+    value: (row) => ratioPct(row.AccountPL, row.ProfitTarget),
+    message: (row, tierPct) =>
+      `Account PL $${row.AccountPL} has crossed ${tierPct}% of Profit Target $${row.ProfitTarget} (now ${ratioPctLabel(row.AccountPL, row.ProfitTarget)}).`,
   },
   {
     key: 'plPct',
@@ -443,13 +466,10 @@ const WARNING_METRICS = [
     label: 'PL %',
     priority: 0,
     sound: 'magic',
-    isWarning: (row, pct) => {
+    value: (row) => plPctFor(row),
+    message: (row, tierPct) => {
       const p = plPctFor(row);
-      return p !== null && p >= pct;
-    },
-    message: (row, pct) => {
-      const p = plPctFor(row);
-      return `Equity-based PL is ${p === null ? 'n/a' : Math.round(p) + '%'} of Profit Target (warns at ${pct}%).`;
+      return `Equity-based PL has crossed ${tierPct}% of Profit Target (now ${p === null ? 'n/a' : Math.round(p) + '%'}).`;
     },
   },
 ];
@@ -512,7 +532,34 @@ function collectASideAccounts() {
   return [...seen.values()];
 }
 
-const warningState = new Map();
+// notify-config.json's "tiers": { "<metricKey>": [80, 90, 95, 100] }
+// overrides a metric's single `thresholds[thresholdKey]` value with a
+// multi-rung ladder. Always returned sorted ascending regardless of the
+// order written in the config file.
+function tierLadderFor(metric, thresholds, cfg) {
+  const override = cfg.tiers?.[metric.key];
+  if (Array.isArray(override) && override.length) {
+    const cleaned = override.map(Number).filter((n) => Number.isFinite(n));
+    if (cleaned.length) return cleaned.sort((a, b) => a - b);
+  }
+  return [thresholds[metric.thresholdKey]];
+}
+
+// Index of the highest rung `value` has reached in `ladder` (ascending),
+// or -1 if value is null or hasn't reached even the first (lowest) rung.
+function tierIndexFor(value, ladder) {
+  if (value === null) return -1;
+  let idx = -1;
+  for (let i = 0; i < ladder.length; i++) {
+    if (value >= ladder[i]) idx = i;
+    else break;
+  }
+  return idx;
+}
+
+// stateKey -> highest tier-ladder index already notified for that
+// account+metric (-1 = none yet, i.e. below the first rung).
+const tierState = new Map();
 
 function checkWarningsAndNotify() {
   const cfg = loadNotifyConfig();
@@ -521,17 +568,22 @@ function checkWarningsAndNotify() {
 
   for (const row of collectASideAccounts()) {
     for (const metric of metrics) {
-      const pct = thresholds[metric.thresholdKey];
+      const ladder = tierLadderFor(metric, thresholds, cfg);
+      const currentIndex = tierIndexFor(metric.value(row), ladder);
       const stateKey = `${row.Platform}|${row.AccountID}|${metric.key}`;
-      const isWarning = metric.isWarning(row, pct);
-      const wasWarning = warningState.get(stateKey) || false;
-      if (isWarning && !wasWarning) {
-        sendPushover(`${row.Platform} ${row.AccountID} -- ${metric.label}`, metric.message(row, pct), {
+      const lastIndex = tierState.has(stateKey) ? tierState.get(stateKey) : -1;
+      // Only fires on a genuine climb to a new rung -- dropping back down
+      // (currentIndex < lastIndex) just lowers the stored index so a later
+      // re-climb through that same rung notifies again, same re-arm
+      // behavior the old true/false version had at its one threshold.
+      if (currentIndex > lastIndex) {
+        const crossedTierPct = ladder[currentIndex];
+        sendPushover(`${row.Platform} ${row.AccountID} -- ${metric.label}`, metric.message(row, crossedTierPct), {
           priority: metric.priority,
           sound: metric.sound,
         });
       }
-      warningState.set(stateKey, isWarning);
+      tierState.set(stateKey, currentIndex);
     }
   }
 }
