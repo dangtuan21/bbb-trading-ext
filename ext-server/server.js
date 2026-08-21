@@ -10,6 +10,21 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// Pushover credentials (PUSHOVER_USER_KEY / PUSHOVER_API_TOKEN) live in this
+// gitignored .env file, not in notify-config.json -- secrets belong in .env,
+// non-secret tuning (thresholds, which alerts are on) stays in the JSON
+// config. Loaded once, here, at startup via Node's built-in
+// process.loadEnvFile (no dotenv dependency needed) -- wrapped in try/catch
+// since the file won't exist yet on a fresh checkout, before .env.example
+// is copied over. Editing .env later requires a server restart to take
+// effect (see sendPushover's comment for why).
+const ENV_FILE = path.join(__dirname, '.env');
+try {
+  process.loadEnvFile(ENV_FILE);
+} catch {
+  // No .env yet -- sendPushover() below reports "not configured" per-call.
+}
+
 const PORT = 8765;
 
 const PLATFORM = Object.freeze({
@@ -45,6 +60,39 @@ const POSITIONS_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'positions.csv');
 // reloads the page -- no separate fetch/mirror path needed for the frontend
 // to see it.
 const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-console', 'src', 'data-fact', 'config.json');
+
+// Non-secret tuning for the warning -> phone-notification feature below
+// (Pushover credentials themselves live in .env -- see ENV_FILE above, not
+// here). Re-read on every check (see loadNotifyConfig) rather than cached
+// at startup, so editing it takes effect without restarting the server.
+// Shape:
+//
+//   {
+//     "thresholds": {  // optional -- overrides DEFAULT_NOTIFY_THRESHOLDS below
+//       "dailyDrawdownPct": 20,
+//       "drawdownPct": 20,
+//       "targetProfitPct": 80
+//     },
+//     "metrics": {      // optional -- set any to false to mute that alert
+//       "dailyDrawdown": true,
+//       "maxDrawdown": true,
+//       "targetPL": true,
+//       "plPct": true
+//     }
+//   }
+const NOTIFY_CONFIG_FILE = path.join(__dirname, 'notify-config.json');
+
+// Mirrors trading-console's src/lib/settings.js DEFAULT_WARNING_* constants.
+// That file's thresholds live in the browser's localStorage (a personal
+// display preference), invisible to this server, so these are an
+// independent copy for the phone-alert side -- override via
+// notify-config.json's "thresholds" if you tune the on-screen ones and want
+// alerts to match.
+const DEFAULT_NOTIFY_THRESHOLDS = {
+  dailyDrawdownPct: 20,
+  drawdownPct: 20,
+  targetProfitPct: 80,
+};
 
 function csvField(value) {
   const str = value === null || value === undefined ? '' : String(value);
@@ -293,6 +341,201 @@ function formatConfigJson(obj) {
   }) + '\n';
 }
 
+// ---------------------------------------------------------------------------
+// Warning -> Pushover phone notifications.
+//
+// Fires once per false->true transition of each of the four warning flags
+// MainView highlights (see trading-console's compute.js: isRatioWarning /
+// isPctWarning) -- not on every /write while a warning stays active, so a
+// sustained breach doesn't re-buzz the phone every scrape cycle. The
+// true/false state is tracked in-memory only (warningState below), so it
+// resets on server restart -- a still-active warning will notify once more
+// right after a restart. Acceptable for a personal local tool; if that ever
+// becomes annoying, persist warningState to a small JSON file the same way
+// positions.csv is persisted.
+// ---------------------------------------------------------------------------
+
+// Platforms treated as the "A" side, same set as compute.js's
+// A_SIDE_PLATFORMS -- these are the accounts MainView's warning columns
+// apply to.
+const NOTIFY_A_SIDE_PLATFORMS = new Set(['RebelsFunding', 'AlphaCapital', 'FTMO']);
+
+function loadNotifyConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(NOTIFY_CONFIG_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function toNum(value) {
+  const n = parseFloat(value);
+  return Number.isNaN(n) ? null : n;
+}
+
+// Duplicated from trading-console's src/lib/compute.js (isRatioWarning /
+// isPctWarning) rather than imported -- that file is an ES module consumed
+// by the Vite frontend, this server is plain CommonJS. Keep both in sync by
+// hand if the warning math ever changes.
+function isRatioWarning(maxAmount, currentAmount, thresholdPct) {
+  const max = toNum(maxAmount);
+  const current = toNum(currentAmount);
+  if (max === null || current === null || max <= 0) return false;
+  return current / max >= thresholdPct / 100;
+}
+
+function ratioPctLabel(currentAmount, maxAmount) {
+  const max = toNum(maxAmount);
+  const current = toNum(currentAmount);
+  if (max === null || current === null || max <= 0) return 'n/a';
+  return `${Math.round((current / max) * 100)}%`;
+}
+
+// A_PLPct from compute.js: (Equity - InitialBalance) / ProfitTarget, as a
+// percentage. Returns null (not a warning) if any input is missing/0.
+function plPctFor(row) {
+  const equity = toNum(row.Equity);
+  const initialBalance = toNum(row.InitialBalance);
+  const target = toNum(row.ProfitTarget);
+  if (equity === null || initialBalance === null || target === null || target === 0) return null;
+  return ((equity - initialBalance) / target) * 100;
+}
+
+// One entry per warning MainView can highlight. `priority`/`sound` are
+// Pushover fields (https://pushover.net/api#priority, #sounds) -- the two
+// drawdown (risk) alerts default louder/more urgent than the two
+// profit-target (good news) ones. Toggle any of these off via
+// notify-config.json's "metrics" without touching this code.
+const WARNING_METRICS = [
+  {
+    key: 'dailyDrawdown',
+    thresholdKey: 'dailyDrawdownPct',
+    label: 'Daily Drawdown',
+    priority: 1,
+    sound: 'siren',
+    isWarning: (row, pct) => isRatioWarning(row.MaxDailyDrawdown, row.TodayDrawdown, pct),
+    message: (row, pct) =>
+      `Today's Drawdown $${row.TodayDrawdown} is ${ratioPctLabel(row.TodayDrawdown, row.MaxDailyDrawdown)} of Max Daily Drawdown $${row.MaxDailyDrawdown} (warns at ${pct}%).`,
+  },
+  {
+    key: 'maxDrawdown',
+    thresholdKey: 'drawdownPct',
+    label: 'Max Drawdown',
+    priority: 1,
+    sound: 'siren',
+    isWarning: (row, pct) => isRatioWarning(row.MaxDrawdownAmount, row.CurrentValueAmount, pct),
+    message: (row, pct) =>
+      `Current Value $${row.CurrentValueAmount} is ${ratioPctLabel(row.CurrentValueAmount, row.MaxDrawdownAmount)} of Max Drawdown $${row.MaxDrawdownAmount} (warns at ${pct}%).`,
+  },
+  {
+    key: 'targetPL',
+    thresholdKey: 'targetProfitPct',
+    label: 'Target PL',
+    priority: 0,
+    sound: 'magic',
+    isWarning: (row, pct) => isRatioWarning(row.ProfitTarget, row.AccountPL, pct),
+    message: (row, pct) =>
+      `Account PL $${row.AccountPL} has reached ${ratioPctLabel(row.AccountPL, row.ProfitTarget)} of Profit Target $${row.ProfitTarget} (warns at ${pct}%).`,
+  },
+  {
+    key: 'plPct',
+    thresholdKey: 'targetProfitPct',
+    label: 'PL %',
+    priority: 0,
+    sound: 'magic',
+    isWarning: (row, pct) => {
+      const p = plPctFor(row);
+      return p !== null && p >= pct;
+    },
+    message: (row, pct) => {
+      const p = plPctFor(row);
+      return `Equity-based PL is ${p === null ? 'n/a' : Math.round(p) + '%'} of Profit Target (warns at ${pct}%).`;
+    },
+  },
+];
+
+// Never throws -- every failure mode (missing config, API error, network
+// error) is caught and reported in the returned { ok, error } instead, so
+// callers on the hot /write path can fire-and-forget it safely, while
+// /notify/test can still surface exactly what went wrong.
+async function sendPushover(title, message, { priority = 0, sound } = {}) {
+  // Unlike notify-config.json (re-read fresh on every check), .env is only
+  // loaded once at startup (see the top of this file) -- process.loadEnvFile
+  // never overwrites a variable already present in process.env, so calling
+  // it again here wouldn't pick up an edited PUSHOVER_API_TOKEN anyway.
+  // Editing .env requires restarting the server (`node server.js`) to take
+  // effect.
+  const userKey = process.env.PUSHOVER_USER_KEY;
+  const apiToken = process.env.PUSHOVER_API_TOKEN;
+  if (!userKey || !apiToken) {
+    const error = `Pushover not configured -- set PUSHOVER_USER_KEY + PUSHOVER_API_TOKEN in ${ENV_FILE}`;
+    console.warn(`[notify] ${error} -- skipped: ${title}`);
+    return { ok: false, error };
+  }
+  const body = new URLSearchParams({
+    token: apiToken,
+    user: userKey,
+    title,
+    message,
+    priority: String(priority),
+  });
+  if (sound) body.set('sound', sound);
+  try {
+    const res = await fetch('https://api.pushover.net/1/messages.json', { method: 'POST', body });
+    if (!res.ok) {
+      const error = await res.text();
+      console.error('[notify] Pushover API error:', res.status, error);
+      return { ok: false, error: `${res.status}: ${error}` };
+    }
+    console.log(`[${new Date().toISOString()}] notify: sent "${title}"`);
+    return { ok: true };
+  } catch (err) {
+    console.error('[notify] Failed to reach Pushover:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+// One row per A-side account -- Balance/Equity/InitialBalance/etc. are
+// account-level fields duplicated across every PositionLog row for that
+// account, so the first row seen for each Platform+AccountID is enough
+// (no need to aggregate across positions the way compute.js's leftGroups
+// does for TotalSize/PositionPL, which aren't used by any warning check).
+function collectASideAccounts() {
+  const seen = new Map();
+  for (const platformKey of PLATFORM_ORDER) {
+    for (const row of platformRows[platformKey]) {
+      if (!NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
+      const key = `${row.Platform}|${row.AccountID}`;
+      if (!seen.has(key)) seen.set(key, row);
+    }
+  }
+  return [...seen.values()];
+}
+
+const warningState = new Map();
+
+function checkWarningsAndNotify() {
+  const cfg = loadNotifyConfig();
+  const thresholds = { ...DEFAULT_NOTIFY_THRESHOLDS, ...cfg.thresholds };
+  const metrics = WARNING_METRICS.filter((m) => cfg.metrics?.[m.key] !== false);
+
+  for (const row of collectASideAccounts()) {
+    for (const metric of metrics) {
+      const pct = thresholds[metric.thresholdKey];
+      const stateKey = `${row.Platform}|${row.AccountID}|${metric.key}`;
+      const isWarning = metric.isWarning(row, pct);
+      const wasWarning = warningState.get(stateKey) || false;
+      if (isWarning && !wasWarning) {
+        sendPushover(`${row.Platform} ${row.AccountID} -- ${metric.label}`, metric.message(row, pct), {
+          priority: metric.priority,
+          sound: metric.sound,
+        });
+      }
+      warningState.set(stateKey, isWarning);
+    }
+  }
+}
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -328,6 +571,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Sends one real Pushover notification, independent of any actual
+  // warning state -- lets you confirm notify-config.json is wired up
+  // correctly without waiting for a real threshold breach.
+  if (req.method === 'GET' && req.url === '/notify/test') {
+    sendPushover('Trading Positions Tracker', 'Test notification -- if you got this, Pushover is wired up correctly.', {
+      priority: 0,
+    }).then((result) => {
+      res.writeHead(result.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/write') {
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
@@ -339,6 +595,13 @@ const server = http.createServer((req, res) => {
 
         platformRows[payload.platform] = config.build(payload);
         writeCombined();
+        // Never let a bug in warning/notification logic take down position
+        // writes -- this is a nice-to-have layered on top of the real job.
+        try {
+          checkWarningsAndNotify();
+        } catch (err) {
+          console.error('[notify] Warning check failed:', err);
+        }
         const count = config.countRows(payload);
         console.log(`[${new Date().toISOString()}] ${payload.platform}: wrote ${count} row(s)`);
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -9,6 +9,18 @@ node_modules/
 ext-server/*.csv
 trading-console/public/data/*.csv
 
+# Pushover credentials for the warning -> phone-notification feature -- see
+# ENV_FILE in ext-server/server.js. Copy ext-server/.env.example (checked
+# in) to ext-server/.env and fill in real values; .env itself never lands
+# in git.
+ext-server/.env
+
+# Local tuning (thresholds, which alerts are on) for the same feature --
+# no secrets in here anymore (see ext-server/.env above), just a personal
+# preference file kept out of git the same way trading-console's warning
+# thresholds (localStorage) aren't checked in either.
+ext-server/notify-config.json
+
 # Logs
 *.log
 npm-debug.log*

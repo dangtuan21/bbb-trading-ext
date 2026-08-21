@@ -1,10 +1,10 @@
 SnapshotDate,Platform,AccountID,AccountLabel,IsRealMoney,Balance,Equity,AccountPL,InitialBalance,StartingEquity,MaxDailyDrawdown,TodayDrawdown,MaxDrawdownAmount,MaxDrawdownPct,CurrentValueAmount,CurrentValuePct,ProfitTarget,PosID,Symbol,Direction,Size,SizeUnit,Opening,Latest,StopLoss,TakeProfit,PositionPL
-08-20-2026,tastyfx,DTEN3,Standard,,5367.90,,-485.21,,,,,,,,,,n/a,USD/CAD,Buy,0.27,lot,1.38699,1.37719,none,none,-192.12
-08-20-2026,tastyfx,DTEN3,Standard,,5367.90,,-485.21,,,,,,,,,,n/a,GBP/CAD,Buy,0.27,lot,1.87808,1.87885,none,none,15.10
-08-20-2026,tastyfx,DTEN3,Standard,,5367.90,,-485.21,,,,,,,,,,n/a,AUD/CAD,Buy,0.08,lot,0.98213,0.98236,none,none,1.34
-08-20-2026,tastyfx,DTEN3,Standard,,5367.90,,-485.21,,,,,,,,,,n/a,EUR/GBP,Sell,0.16,lot,0.8574,0.8569,none,none,10.92
-08-20-2026,tastyfx,DTEN3,Standard,,5367.90,,-485.21,,,,,,,,,,n/a,EUR/AUD,Sell,0.23,lot,1.63498,1.63891,none,none,-64.48
-08-20-2026,tastyfx,DTEN3,Standard,,5367.90,,-485.21,,,,,,,,,,n/a,NZD/USD,Sell,0.27,lot,0.58738,0.59686,none,none,-255.96
+08-20-2026,tastyfx,DTEN3,Standard,,5368.92,,-503.54,,,,,,,,,,n/a,USD/CAD,Buy,0.27,lot,1.38699,1.37648,none,none,-206.14
+08-20-2026,tastyfx,DTEN3,Standard,,5368.92,,-503.54,,,,,,,,,,n/a,GBP/CAD,Buy,0.27,lot,1.87808,1.87865,none,none,11.18
+08-20-2026,tastyfx,DTEN3,Standard,,5368.92,,-503.54,,,,,,,,,,n/a,AUD/CAD,Buy,0.08,lot,0.98213,0.9825,none,none,2.15
+08-20-2026,tastyfx,DTEN3,Standard,,5368.92,,-503.54,,,,,,,,,,n/a,EUR/GBP,Sell,0.16,lot,0.8574,0.85692,none,none,10.48
+08-20-2026,tastyfx,DTEN3,Standard,,5368.92,,-503.54,,,,,,,,,,n/a,EUR/AUD,Sell,0.23,lot,1.63498,1.63856,none,none,-58.77
+08-20-2026,tastyfx,DTEN3,Standard,,5368.92,,-503.54,,,,,,,,,,n/a,NZD/USD,Sell,0.27,lot,0.58738,0.5971,none,none,-262.44
 08-20-2026,RebelsFunding,RF-325-46378,Silver,No,39995.91,39675.73,-320.18,40000,,1971.95,0,4000,10,328.63,0.82,2000,#126723217,GBP/CAD,Sell,3.00,lot,1.87779,1.87926,none,1.86856,-324.27
 08-20-2026,RebelsFunding,22026429775880,Silver,No,39998.24,42785.24,2787.00,40000,,2102.96,0,4000,10,0,0,3200,#126160467,NZD/USD,Buy,3.00,lot,0.58746,0.59674,none,0.59824,2782.24
 08-20-2026,RebelsFunding,22026429632526,Silver,No,39997.00,42090.21,2093.21,40000,,2086,0,4000,10,0,0,3200,#126021771,USD/CAD,Sell,3.00,lot,1.38692,1.37731,none,1.37224,2090.21
