@@ -36,6 +36,28 @@ function ThresholdField({ id, label, value, onChange }) {
   )
 }
 
+function ToggleField({ id, label, value, onChange }) {
+  return (
+    <div className="grid grid-cols-[200px_1fr] items-center gap-x-4 gap-y-1">
+      <label htmlFor={id} className="text-sm font-medium text-slate-600">
+        {label}
+      </label>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={value}
+        onClick={() => onChange(!value)}
+        className={`w-16 rounded-full py-1.5 text-center text-xs font-semibold transition-colors ${
+          value ? "bg-emerald-600 text-white" : "bg-slate-300 text-slate-600"
+        }`}
+      >
+        {value ? "On" : "Off"}
+      </button>
+    </div>
+  )
+}
+
 export default function SettingsPage({
   warningDailyDrawdownPct,
   onWarningDailyDrawdownChange,
@@ -43,6 +65,8 @@ export default function SettingsPage({
   onWarningDrawdownChange,
   warningTargetProfitPct,
   onWarningTargetProfitChange,
+  warningTPSLEnabled,
+  onWarningTPSLChange,
 }) {
   return (
     <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -64,6 +88,12 @@ export default function SettingsPage({
           label="Warning Target Profit %"
           value={warningTargetProfitPct}
           onChange={onWarningTargetProfitChange}
+        />
+        <ToggleField
+          id="warning-tpsl-enabled"
+          label="Warning TP/SL"
+          value={warningTPSLEnabled}
+          onChange={onWarningTPSLChange}
         />
       </div>
     </div>

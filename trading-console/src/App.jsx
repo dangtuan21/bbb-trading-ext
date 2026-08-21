@@ -12,6 +12,7 @@ import {
   useWarningDailyDrawdownThreshold,
   useWarningDrawdownThreshold,
   useWarningTargetProfitThreshold,
+  useWarningTPSLEnabled,
 } from "./lib/settings"
 
 const ACCOUNTLOG_COLUMNS = [
@@ -36,6 +37,12 @@ const ACCOUNTLOG_COLUMNS = [
 // "A Account ID" is the only clickable cell (link: true, see DataTable) --
 // clicking it opens the edit-position modal (RuleEditForm) for that row.
 //
+// A_TPSL ("TP/SL") -- "TP/SL" if the account has an open position with
+// both a Take Profit and a Stop Loss set, "TP"/"SL" if only one, "" if
+// neither (see tpSlLabel in compute.js). An account with multiple open
+// positions is flagged true for either if ANY of them has one set, same
+// aggregate-across-positions approach as the A Symbol/A Direction columns.
+//
 // A_TargetEquity ("A Target Equity") = InitialBalance + A_ProfitTarget
 // ("A Target PL") -- the account's equity once it hits its profit target,
 // computed in computeMainView. Placed next to A_Equity (its "current"
@@ -47,12 +54,18 @@ const ACCOUNTLOG_COLUMNS = [
 // styling of its own) -- just its warning flag (A_PLPctWarning, fired once
 // A_PLPct itself reaches Warning Target Profit %), same amber highlight as
 // every other warning column when triggered.
+//
+// A_TPSL's highlightIf flags an EMPTY cell (no Take Profit or Stop Loss set
+// on any open position) rather than a value crossing a threshold -- gated
+// by the "Warning TP/SL" Settings toggle (useWarningTPSLEnabled), so it's
+// swapped out for `undefined` in App() below when the toggle is off.
 const MAINVIEW_COLUMNS = [
   { key: "A_Platform", label: "A Platform" },
   { key: "A_AccountID", label: "A Account ID", link: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
+  { key: "A_TPSL", label: "TP/SL", highlightIf: (row) => row.A_TPSL === "" },
   { key: "A_TargetEquity", label: "A Target Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
   { key: "A_Equity", label: "A Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
   { key: "A_PLPct", label: "A PL %", numeric: true, pct: true, highlightIf: (row) => row.A_PLPctWarning },
@@ -76,11 +89,24 @@ export default function App() {
   const [warningDailyDrawdownPct, setWarningDailyDrawdownPct] = useWarningDailyDrawdownThreshold()
   const [warningDrawdownPct, setWarningDrawdownPct] = useWarningDrawdownThreshold()
   const [warningTargetProfitPct, setWarningTargetProfitPct] = useWarningTargetProfitThreshold()
+  const [warningTPSLEnabled, setWarningTPSLEnabled] = useWarningTPSLEnabled()
 
   const accountLogRows = useMemo(() => computeAccountLog(rows), [rows])
   const mainView = useMemo(
     () => computeMainView(rows, matchRules, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct),
     [rows, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct]
+  )
+
+  // Swap A_TPSL's highlightIf out for undefined when the "Warning TP/SL"
+  // Settings toggle is off, rather than baking the toggle into the
+  // predicate itself -- keeps MAINVIEW_COLUMNS' own highlightIf a pure
+  // function of the row, same pattern as every other column.
+  const mainViewColumns = useMemo(
+    () =>
+      warningTPSLEnabled
+        ? MAINVIEW_COLUMNS
+        : MAINVIEW_COLUMNS.map((col) => (col.key === "A_TPSL" ? { ...col, highlightIf: undefined } : col)),
+    [warningTPSLEnabled]
   )
 
   // Options for RuleEditForm's B-position dropdown -- every currently-known
@@ -123,6 +149,8 @@ export default function App() {
             onWarningDrawdownChange={setWarningDrawdownPct}
             warningTargetProfitPct={warningTargetProfitPct}
             onWarningTargetProfitChange={setWarningTargetProfitPct}
+            warningTPSLEnabled={warningTPSLEnabled}
+            onWarningTPSLChange={setWarningTPSLEnabled}
           />
         )}
 
@@ -138,7 +166,7 @@ export default function App() {
 
         {status === "ready" && active === "mainview" && (
           <DataTable
-            columns={MAINVIEW_COLUMNS}
+            columns={mainViewColumns}
             rows={mainView.joined}
             emptyMessage="No RebelsFunding, FTMO, or AlphaCapital accounts in this snapshot yet."
             onRowClick={setEditingRow}

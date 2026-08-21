@@ -20,10 +20,21 @@ export const DEFAULT_WARNING_DRAWDOWN_PCT = 20
 const TARGET_PROFIT_STORAGE_KEY = "warningTargetProfitPct"
 export const DEFAULT_WARNING_TARGET_PROFIT_PCT = 80
 
+// "TP/SL" column empty-cell warning -- On/Off, not a threshold, so it gets
+// its own boolean-flavored storage key/default rather than reusing
+// TARGET_PROFIT_STORAGE_KEY's numeric shape.
+const TPSL_STORAGE_KEY = "warningTPSLEnabled"
+export const DEFAULT_WARNING_TPSL_ENABLED = true
+
 function readStoredThreshold(storageKey, fallback) {
   const raw = localStorage.getItem(storageKey)
   const n = raw === null ? NaN : Number(raw)
   return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+function readStoredBoolean(storageKey, fallback) {
+  const raw = localStorage.getItem(storageKey)
+  return raw === null ? fallback : raw === "true"
 }
 
 /**
@@ -80,4 +91,24 @@ export function useWarningTargetProfitThreshold() {
   }
 
   return [threshold, updateThreshold]
+}
+
+/**
+ * MainView's "TP/SL" column highlight -- On/Off (not a threshold): when on,
+ * a row whose account has no open position with a Take Profit or Stop Loss
+ * set (A_TPSL === "") gets flagged for the same amber warning background as
+ * the threshold-driven columns. Same localStorage persistence as the
+ * threshold settings above, just a boolean instead of a number.
+ */
+export function useWarningTPSLEnabled() {
+  const [enabled, setEnabled] = useState(() =>
+    readStoredBoolean(TPSL_STORAGE_KEY, DEFAULT_WARNING_TPSL_ENABLED)
+  )
+
+  function updateEnabled(next) {
+    setEnabled(next)
+    localStorage.setItem(TPSL_STORAGE_KEY, String(next))
+  }
+
+  return [enabled, updateEnabled]
 }

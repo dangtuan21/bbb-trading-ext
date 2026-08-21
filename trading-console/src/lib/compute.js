@@ -118,6 +118,8 @@ export function computeMainView(
         directions: new Set(),
         totalSize: 0,
         positionPL: 0,
+        hasTakeProfit: false,
+        hasStopLoss: false,
       })
     }
     const g = leftGroups.get(key)
@@ -127,6 +129,13 @@ export function computeMainView(
     if (size !== null) g.totalSize += size
     const pl = toNumber(row.PositionPL)
     if (pl !== null) g.positionPL += pl
+    // "none" is every platform's sentinel for "not set" (see
+    // ext-rebelsfunding/ext-ftmo/ext-alphacapital's background.js) --
+    // anything else is a real price. An account with multiple open
+    // positions is flagged true if ANY of them has one set, same
+    // aggregate-across-positions approach as Symbol/Direction above.
+    if (row.TakeProfit && row.TakeProfit !== "none") g.hasTakeProfit = true
+    if (row.StopLoss && row.StopLoss !== "none") g.hasStopLoss = true
   }
 
   const left = [...leftGroups.values()].map((g) => ({
@@ -148,6 +157,8 @@ export function computeMainView(
     Direction: g.directions.size ? [...g.directions].join(", ") : "n/a",
     TotalSize: round2(g.totalSize),
     PositionPL: round2(g.positionPL),
+    hasTakeProfit: g.hasTakeProfit,
+    hasStopLoss: g.hasStopLoss,
   }))
 
   const accountLog = computeAccountLog(rows)
@@ -288,6 +299,10 @@ export function computeMainView(
       A_Symbol: l.Symbol,
       A_Direction: l.Direction,
       A_TotalSize: l.TotalSize,
+      // "TP/SL" if the account has at least one open position with both a
+      // Take Profit and a Stop Loss set, "TP"/"SL" if only one of the two,
+      // "" if neither -- see hasTakeProfit/hasStopLoss above.
+      A_TPSL: tpSlLabel(l.hasTakeProfit, l.hasStopLoss),
       A_MaxDailyDrawdown: l.MaxDailyDrawdown || "",
       A_TodayDrawdown: l.TodayDrawdown || "",
       A_MaxDrawdownAmount: l.MaxDrawdownAmount || "",
@@ -345,6 +360,13 @@ function normSymbol(s) {
   return (s || "").trim().toUpperCase()
 }
 
+function tpSlLabel(hasTakeProfit, hasStopLoss) {
+  if (hasTakeProfit && hasStopLoss) return "TP/SL"
+  if (hasTakeProfit) return "TP"
+  if (hasStopLoss) return "SL"
+  return ""
+}
+
 // Shared by A_DailyDrawdownWarning (Max Daily DD/Cur Daily DD, driven by
 // "Warning Daily Drawdown %"), A_MaxDrawdownWarning (contest-wide Max
 // DD/Cur DD, driven by "Warning Drawdown %"), and A_TargetProfitWarning (A
@@ -391,9 +413,9 @@ function isPctWarning(pctValue, thresholdPct) {
 export function formatMoney(value) {
   const n = toNumber(value)
   if (n === null) return value ?? ""
-  const formatted = Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const formatted = Math.round(Math.abs(n)).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   })
   return n < 0 ? `-${formatted}` : formatted
 }
