@@ -10,6 +10,9 @@ const positionsBody = document.getElementById('positionsBody');
 const forceCaptureBtn = document.getElementById('forceCaptureBtn');
 const lastErrorRow = document.getElementById('lastErrorRow');
 const lastErrorEl = document.getElementById('lastError');
+const noPositionsMsg = document.getElementById('noPositionsMsg');
+const lastScanEl = document.getElementById('lastScan');
+const diagLog = document.getElementById('diagLog');
 
 function fmtTime(iso) {
   if (!iso) return '–';
@@ -19,7 +22,8 @@ function fmtTime(iso) {
 
 async function refreshStatus() {
   const data = await chrome.storage.local.get([
-    'latestSnapshot', 'lastWriteTime', 'captureIntervalMinutes', 'lastWriteError'
+    'latestSnapshot', 'lastWriteTime', 'captureIntervalMinutes', 'lastWriteError',
+    'lastScanDiagnostics', 'lastScanTime'
   ]);
 
   if (data.lastWriteError) {
@@ -44,13 +48,30 @@ async function refreshStatus() {
 
   if (data.latestSnapshot?.positions?.length) {
     positionsTable.style.display = '';
+    noPositionsMsg.style.display = 'none';
     positionsBody.innerHTML = '';
     for (const p of data.latestSnapshot.positions) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${p.market}</td><td>${p.size}</td><td>${p.latest}</td><td>${p.profitLossUsd}</td>`;
       positionsBody.appendChild(tr);
     }
+  } else {
+    // Last scan found nothing (or hasn't run yet) -- say so explicitly
+    // instead of just leaving a blank gap where the table would be, since
+    // that reads as "the extension is doing nothing" rather than "the last
+    // scan came up empty, here's why" (see Diagnostics below it).
+    positionsTable.style.display = 'none';
+    noPositionsMsg.style.display = '';
   }
+
+  // content.js's captureSnapshot() now records lastScanDiagnostics/
+  // lastScanTime on EVERY scan (automatic or "Write Now"), success or not
+  // -- unlike latestSnapshot/lastWriteTime above, which only ever update on
+  // a scan that actually found positions. This is what lets a failed scan
+  // still show something concrete here instead of the popup just staying
+  // silent.
+  lastScanEl.textContent = fmtTime(data.lastScanTime);
+  diagLog.textContent = data.lastScanDiagnostics ? JSON.stringify(data.lastScanDiagnostics, null, 2) : '';
 }
 
 forceCaptureBtn.addEventListener('click', async () => {

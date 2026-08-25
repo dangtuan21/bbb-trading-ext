@@ -19,6 +19,10 @@
   .settings-row input { width: 50px; }
   #actionLog { margin-top: 8px; white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 11px; max-height: 320px; overflow: auto; border: 1px solid #eee; padding: 4px; }
   #actionLog:empty { display: none; border: none; padding: 0; }
+  #noPositionsMsg { margin-top: 8px; color: #9a5b00; }
+  #diagLog { margin-top: 4px; white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 11px; max-height: 220px; overflow: auto; border: 1px solid #eee; padding: 4px; background: #fafafa; }
+  #diagLog:empty { display: none; border: none; padding: 0; }
+  details summary { cursor: pointer; color: #666; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -44,6 +48,13 @@
     <thead><tr><th>Market</th><th>Size</th><th>Latest</th><th>P/L</th></tr></thead>
     <tbody id="positionsBody"></tbody>
   </table>
+
+  <div id="noPositionsMsg" style="display:none;">No positions found by the last scan -- see Diagnostics below.</div>
+
+  <details>
+    <summary>Diagnostics (last scan <span id="lastScan">–</span>)</summary>
+    <pre id="diagLog"></pre>
+  </details>
 
   <script src="popup.js"></script>
 </body>

@@ -109,7 +109,22 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
           {rows.map((row, i) => {
             const rowBackground = rowBg && rowBg(row)
             return (
-            <tr key={i} className="hover:bg-slate-50">
+            // A plain hover:bg-* on the <tr> barely shows in MainView --
+            // almost every cell already paints its own background (a
+            // column's columnBg tint, an animate-warn-blink highlight, or
+            // rowBg's whole-row gray-400 override), which sits on the <td>
+            // itself and covers whatever the <tr> underneath is doing.
+            // hover:brightness-95 on the <tr> was tried first, but table
+            // rows don't reliably apply `filter` across every cell in every
+            // browser -- confirmed live, it only darkened some cells, not
+            // the row as a whole. Fixed with an inset box-shadow instead,
+            // applied per <td> (via group-hover, `group` on the <tr>): a
+            // shadow always paints on top of that cell's own
+            // background-color, so "9999px" of slate at 6% opacity reads as
+            // a uniform darken no matter what color/highlight state sits
+            // underneath -- reliable per-cell rather than hoping one
+            // filtered box covers every cell inside it.
+            <tr key={i} className="group">
               {cols.map((col) => {
                 const raw = row[col.key]
                 const isNegative = col.money && parseFloat(raw) < 0
@@ -119,7 +134,7 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                 return (
                   <td
                     key={col.key}
-                    className={`whitespace-nowrap px-3 py-2 ${
+                    className={`whitespace-nowrap px-3 py-2 transition-shadow duration-100 group-hover:shadow-[inset_0_0_0_9999px_rgba(15,23,42,0.06)] ${
                       col.numeric ? "text-right tabular-nums" : "text-left"
                     } ${cellBg} ${
                       rowBackground ? "text-black" : isNegative ? "text-red-600" : "text-slate-700"
