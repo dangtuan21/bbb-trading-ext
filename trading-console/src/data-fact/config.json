@@ -81,6 +81,10 @@
         {
             "A-position": "FTMO|650007509|NZD/USD",
             "match-B-position": "tastyfx|DTEN3|NZD/USD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430963412|EUR/NZD",
+            "match-B-position": "tastyfx|DTEN3|EUR/NZD"
         }
     ],
     "hidden-accounts": [

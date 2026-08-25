@@ -634,6 +634,16 @@ async function sendPushover(title, message, { priority = 0, sound } = {}) {
 // MainView excludes them (see trading-console's computeMainView). An
 // account you've archived out of the dashboard shouldn't still buzz your
 // phone.
+//
+// `_hasOpenPosition` is aggregated the same any-row-counts way as
+// `_hasTakeProfit`/`_hasStopLoss` -- true if ANY row seen for that account
+// has a real Symbol (not "n/a", the no-open-positions placeholder every
+// platform writes -- see _blankRowForAccount in ext-rebelsfunding/
+// background.js and its equivalents). checkWarningsAndNotify skips an
+// account entirely when this is false, same as compute.js's
+// hasOpenPosition suppresses every MainView highlight for a no-position
+// row -- an account with nothing open shouldn't buzz your phone off its
+// stale last-known Balance/Equity/drawdown figures either.
 function collectASideAccounts() {
   let hiddenKeys;
   try {
@@ -649,10 +659,11 @@ function collectASideAccounts() {
       if (!NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
       const key = `${row.Platform}|${row.AccountID}`;
       if (hiddenKeys.has(key)) continue;
-      if (!seen.has(key)) seen.set(key, { ...row, _hasTakeProfit: false, _hasStopLoss: false });
+      if (!seen.has(key)) seen.set(key, { ...row, _hasTakeProfit: false, _hasStopLoss: false, _hasOpenPosition: false });
       const acct = seen.get(key);
       if (row.TakeProfitPrice && row.TakeProfitPrice !== 'none') acct._hasTakeProfit = true;
       if (row.StopLossPrice && row.StopLossPrice !== 'none') acct._hasStopLoss = true;
+      if (row.Symbol && row.Symbol !== 'n/a') acct._hasOpenPosition = true;
     }
   }
   return [...seen.values()];
@@ -693,6 +704,12 @@ function checkWarningsAndNotify() {
   const metrics = WARNING_METRICS.filter((m) => cfg.metrics?.[m.key] !== false);
 
   for (const row of collectASideAccounts()) {
+    // No open position at all -- skip every metric for this account rather
+    // than let stale last-known account-level numbers (Balance/Equity/DD
+    // figures still carried on the account with nothing open) trigger a
+    // phone notification. Same suppression trading-console's compute.js
+    // already applies to MainView's on-screen highlights (hasOpenPosition).
+    if (!row._hasOpenPosition) continue;
     for (const metric of metrics) {
       const ladder = tierLadderFor(metric, thresholds, cfg);
       // `thresholds` is passed through to value()/message() too -- only the
