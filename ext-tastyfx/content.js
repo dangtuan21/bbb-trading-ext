@@ -60,6 +60,19 @@ function hasVisibleLayout(el) {
 
 const MARKET_PATTERN = /^[A-Z]{2,4}\/[A-Z]{2,4}$/;
 
+// Same shape as MARKET_PATTERN but NOT anchored -- used to pull a currency
+// pair out of a market-name cell that has extra content glued onto it, e.g.
+// IG renders a row for an instrument with multiple open deals netted
+// together as ONE row with a "+2"/"+3" expand badge INSIDE the market-name
+// cell itself (confirmed via a synthetic test reproducing that exact shape:
+// cell.textContent.trim() comes back as "AUD/CAD+2", which the anchored,
+// exact MARKET_PATTERN can never match). MARKET_PATTERN itself is kept as-is
+// for the market-pattern-fallback row-detection scan below, where an exact
+// match on a whole cell's text is still the right check for "is this cell
+// JUST a market name" (used to find rows when the ig-grid_row class isn't
+// present at all, a coarser signal than picking a field out of a known cell).
+const MARKET_EXTRACT_PATTERN = /[A-Z]{2,4}\/[A-Z]{2,4}/;
+
 // IG tags each cell with a semantic data-automation attribute (instrumentName,
 // dealSize, openLevel, latest, stopLevel, ...) and a "cell-<field>" class as
 // fallback. Keying off those is far more reliable than positional alignment,
@@ -146,14 +159,27 @@ function extractRows(headerRow) {
   const positions = [];
   let firstRowCellMap = null;
   let firstRowDuplicateKeys = null;
+  const droppedRowsRawMarket = [];
   for (const row of rowEls) {
     const { map, duplicateKeys } = extractCellMap(row);
     if (firstRowCellMap === null) {
       firstRowCellMap = map;
       firstRowDuplicateKeys = duplicateKeys;
     }
-    const market = pickField(map, FIELD_ALIASES.market);
-    if (!market || !MARKET_PATTERN.test(market)) continue;
+    const rawMarket = pickField(map, FIELD_ALIASES.market);
+    // Extract (not exact-match) the currency pair -- a row for an instrument
+    // with multiple open deals netted together renders with a "+2"/"+3"
+    // expand badge glued onto the same market-name cell (e.g. "AUD/CAD+2"),
+    // which no longer equals a bare "AUD/CAD" -- see MARKET_EXTRACT_PATTERN
+    // above. This was confirmed to be exactly why those rows went missing:
+    // a synthetic fixture reproducing that shape dropped them under the old
+    // exact-match check and kept them once this switched to extraction.
+    const marketMatch = rawMarket && MARKET_EXTRACT_PATTERN.exec(rawMarket);
+    if (!marketMatch) {
+      if (rawMarket) droppedRowsRawMarket.push(rawMarket);
+      continue;
+    }
+    const market = marketMatch[0];
 
     positions.push({
       market,
@@ -168,7 +194,7 @@ function extractRows(headerRow) {
 
   return {
     positions,
-    diag: { rowSource, rowElCount: rowEls.length, firstRowCellMap, firstRowDuplicateKeys },
+    diag: { rowSource, rowElCount: rowEls.length, firstRowCellMap, firstRowDuplicateKeys, droppedRowsRawMarket },
   };
 }
 
