@@ -137,9 +137,11 @@ function fmt2(n) {
 // (Today's Drawdown / Today's Starting Equity), captured as-is for
 // reference -- NOT the same ratio the dashboard's own Daily DD warning uses
 // (Today's Drawdown / Max Daily Drawdown, computed in compute.js/
-// checkWarningsAndNotify below).
+// checkWarningsAndNotify below). Phase (RebelsFunding-only too, e.g. "1" or
+// "2") comes straight off the RF Client Zone accounts list -- see
+// ext-rebelsfunding/background.js's fnParseAccounts/scrapeAccount.
 const HEADER = [
-  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
+  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'Phase', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
   'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'MaxDailyDrawdownPct',
   'TodayDrawdown', 'TodayDrawdownPct',

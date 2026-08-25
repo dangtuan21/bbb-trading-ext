@@ -112,6 +112,7 @@ export function computeMainView(
         Platform: row.Platform,
         AccountID: row.AccountID,
         AccountLabel: row.AccountLabel,
+        Phase: row.Phase,
         Balance: row.Balance,
         Equity: row.Equity,
         AccountPL: row.AccountPL,
@@ -168,6 +169,7 @@ export function computeMainView(
     Platform: g.Platform,
     AccountID: g.AccountID,
     AccountLabel: g.AccountLabel,
+    Phase: g.Phase,
     Balance: g.Balance,
     Equity: g.Equity,
     AccountPL: g.AccountPL,
@@ -332,6 +334,10 @@ export function computeMainView(
     joined.push({
       A_Platform: l.Platform,
       A_AccountID: l.AccountID,
+      // "1"/"2"/etc, from RF Client Zone's own accounts list (see Phase in
+      // ext-rebelsfunding/background.js) -- blank for FTMO/AlphaCapital,
+      // which have no equivalent multi-phase-challenge concept scraped.
+      A_Phase: l.Phase || "",
       A_AccountLabel: l.AccountLabel,
       A_Balance: l.Balance,
       A_Equity: l.Equity,

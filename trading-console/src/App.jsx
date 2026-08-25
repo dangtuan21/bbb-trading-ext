@@ -38,6 +38,12 @@ const ACCOUNTLOG_COLUMNS = [
 // "A Account ID" is the only clickable cell (link: true, see DataTable) --
 // clicking it opens the edit-position modal (RuleEditForm) for that row.
 //
+// A_Phase ("A Phase") -- RebelsFunding's own challenge phase ("1"/"2"/etc),
+// read off RF Client Zone's accounts list (see Phase in
+// ext-rebelsfunding/background.js). Blank for FTMO/AlphaCapital rows, which
+// have nothing equivalent scraped. Placed right after A Account ID, plain
+// (no highlightIf/background of its own).
+//
 // A_TPSL ("TP/SL") -- "TP/SL" if the account has an open position with
 // both a Take Profit and a Stop Loss set, "TP"/"SL" if only one, "" if
 // neither (see tpSlLabel in compute.js). An account with multiple open
@@ -82,6 +88,10 @@ const ACCOUNTLOG_COLUMNS = [
 const MAINVIEW_COLUMNS = [
   { key: "A_Platform", label: "A Platform" },
   { key: "A_AccountID", label: "A Account ID", link: true },
+  // RebelsFunding-only ("1"/"2"/etc, from RF Client Zone's own accounts
+  // list -- see Phase in ext-rebelsfunding/background.js); blank for
+  // FTMO/AlphaCapital rows.
+  { key: "A_Phase", label: "A Phase" },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },

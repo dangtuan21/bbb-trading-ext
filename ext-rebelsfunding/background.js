@@ -247,7 +247,12 @@ function fnParseAccounts(tabLabel) {
         status: lines[i + 1],
         program: lines[i + 2],
         balance: lines[i + 3],
-        phase: lines[i + 4],
+        // On the Funded tab this 5th line isn't a real "phase 1/2" the way
+        // Challenge cards have -- a funded account has already cleared every
+        // phase, so it's not something worth reading off the page at all.
+        // Report it as the fixed label "Fund" instead of whatever text
+        // happens to sit there.
+        phase: tabLabel === 'Funded' ? 'Fund' : lines[i + 4],
         tab: tabLabel,
         tabIndex,
       });
@@ -923,6 +928,14 @@ async function scrapeAccount(scanTabId, acc) {
     Platform: 'RebelsFunding',
     AccountID: acc.account,
     AccountLabel: acc.program,
+    // "1"/"2"/etc -- read straight off the RF Client Zone accounts list
+    // (fnParseAccounts already captures this per account, right after
+    // Balance in that page's own 5-line block; it just wasn't threaded
+    // through to the CSV row until now). Not re-read from RF-Trader's own
+    // header (which also shows it, e.g. "...Silver-10,000 phase1") since
+    // the Client Zone list is already the source scrapeAccount trusts for
+    // every other account-level field here (AccountLabel/Balance/etc).
+    Phase: acc.phase || '',
     IsRealMoney: isRealMoney,
     Balance: balance,
     Equity: equity,
@@ -971,7 +984,7 @@ function fmtDate(d) {
 function _blankRowForAccount(acc) {
   return {
     SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
-    AccountLabel: acc.program, IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
+    AccountLabel: acc.program, Phase: acc.phase || '', IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
     InitialBalance: '', StartingEquity: '', MaxDailyDrawdown: '', MaxDailyDrawdownPct: '',
     TodayDrawdown: '', TodayDrawdownPct: '',
     MaxDrawdownAmount: '', MaxDrawdownPct: '', CurrentValueAmount: '', CurrentValuePct: '',

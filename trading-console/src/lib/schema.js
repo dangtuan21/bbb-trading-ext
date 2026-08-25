@@ -7,6 +7,7 @@ export const POSITIONLOG_FIELDS = [
   "Platform",
   "AccountID",
   "AccountLabel",
+  "Phase",
   "Balance",
   "Equity",
   "AccountPL",
