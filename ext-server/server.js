@@ -77,7 +77,9 @@ const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-console', 's
 //       "dailyDrawdown": true,
 //       "maxDrawdown": true,
 //       "targetPL": true,
-//       "plPct": true
+//       "plPct": true,
+//       "tpsl": true    // mirrors MainView's "Warning TP/SL" highlight --
+//                        // see WARNING_METRICS' tpsl entry below
 //     },
 //     "tiers": {        // optional -- multi-rung ladder per metric, overrides
 //                        // that metric's single "thresholds" value above.
@@ -99,6 +101,14 @@ const DEFAULT_NOTIFY_THRESHOLDS = {
   dailyDrawdownPct: 20,
   drawdownPct: 20,
   targetProfitPct: 80,
+  // Not really a "%" like the others -- the tpsl metric's value() only ever
+  // returns 100 (warning) or null (no warning), so this is just the single
+  // rung that 100 needs to reach/exceed. Exists so tpsl can reuse the same
+  // tier-ladder/thresholds plumbing as every other metric instead of a
+  // bespoke boolean path. Override via notify-config.json if you ever add a
+  // "tiers": { "tpsl": [...] } ladder, though a boolean metric has no real
+  // use for more than one rung.
+  tpslPct: 100,
 };
 
 function csvField(value) {
@@ -119,18 +129,24 @@ function fmt2(n) {
 
 // Union of every platform's columns. tastyfx doesn't have a concept of
 // IsRealMoney -- its rows just leave that field blank. InitialBalance/
-// StartingEquity/MaxDailyDrawdown/TodayDrawdown/MaxDrawdownAmount/
-// MaxDrawdownPct/CurrentValueAmount/CurrentValuePct/ProfitTarget are
-// RebelsFunding-only (from RF-Trader's "Contest stats" tab) -- every other
-// platform leaves them blank too.
+// StartingEquity/MaxDailyDrawdown/MaxDailyDrawdownPct/TodayDrawdown/
+// TodayDrawdownPct/MaxDrawdownAmount/MaxDrawdownPct/CurrentValueAmount/
+// CurrentValuePct/ProfitTarget are RebelsFunding-only (from RF-Trader's
+// "Contest stats" tab) -- every other platform leaves them blank too.
+// MaxDailyDrawdownPct/TodayDrawdownPct are the platform's OWN percentages
+// (Today's Drawdown / Today's Starting Equity), captured as-is for
+// reference -- NOT the same ratio the dashboard's own Daily DD warning uses
+// (Today's Drawdown / Max Daily Drawdown, computed in compute.js/
+// checkWarningsAndNotify below).
 const HEADER = [
   'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
-  'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'TodayDrawdown',
+  'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'MaxDailyDrawdownPct',
+  'TodayDrawdown', 'TodayDrawdownPct',
   'MaxDrawdownAmount', 'MaxDrawdownPct', 'CurrentValueAmount', 'CurrentValuePct',
   'ProfitTarget',
   'PosID', 'Symbol', 'Direction', 'Size', 'SizeUnit',
-  'Opening', 'Latest', 'StopLoss', 'TakeProfit', 'PositionPL',
+  'Opening', 'Latest', 'StopLossPrice', 'TakeProfitPrice', 'PositionPL',
 ];
 
 function buildTastyfxRows({ snapshot, accountId, accountLabel }) {
@@ -159,8 +175,8 @@ function buildTastyfxRows({ snapshot, accountId, accountLabel }) {
     SizeUnit: 'lot',
     Opening: p.opening,
     Latest: p.latest,
-    StopLoss: p.stopLoss === null ? 'none' : p.stopLoss,
-    TakeProfit: p.takeProfit === null ? 'none' : p.takeProfit,
+    StopLossPrice: p.stopLoss === null ? 'none' : p.stopLoss,
+    TakeProfitPrice: p.takeProfit === null ? 'none' : p.takeProfit,
     PositionPL: fmt2(p.profitLossUsd),
   }));
 }
@@ -251,6 +267,16 @@ function loadExistingPositions() {
     const fields = parseCsvLine(lines[i]);
     const row = {};
     header.forEach((key, idx) => { row[key] = fields[idx] ?? ''; });
+    // One-time migration for a positions.csv written before StopLoss/
+    // TakeProfit were renamed to StopLossPrice/TakeProfitPrice -- an old
+    // file's header still has the old names, so `row` comes out of the
+    // loop above keyed by those. Without this, every row loaded from disk
+    // at startup would show blank StopLossPrice/TakeProfitPrice cells (the
+    // new HEADER's column names) until each platform gets rescraped and
+    // overwrites it. Safe to run unconditionally -- a no-op once the file
+    // itself has been rewritten with the new header.
+    if ('StopLoss' in row && !('StopLossPrice' in row)) row.StopLossPrice = row.StopLoss;
+    if ('TakeProfit' in row && !('TakeProfitPrice' in row)) row.TakeProfitPrice = row.TakeProfit;
     const platformKey = PLATFORM_KEY_BY_DISPLAY[row.Platform];
     if (platformKey) platformRows[platformKey].push(row);
   }
@@ -334,6 +360,45 @@ function applyRuleEdit(payload) {
   fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
 }
 
+// Removes one position-rule entry entirely (RuleEditForm's "Delete" button).
+// `payload.aSymbol` (string | null) identifies the entry the same way
+// applyRuleEdit's originalASymbol does -- null means the account's blanket
+// rule, a string means that exact symbol-specific rule. Throws if no such
+// entry exists, same "let the caller's catch block report it" convention as
+// the rest of this file's config helpers.
+function deleteRule(payload) {
+  const raw = fs.readFileSync(MATCH_RULES_CONFIG_FILE, 'utf8');
+  const configJson = JSON.parse(raw);
+  if (!Array.isArray(configJson['position-rule'])) configJson['position-rule'] = [];
+  const rules = configJson['position-rule'];
+
+  const idx = findRuleIndex(rules, payload.aPlatform, payload.aAccountId, payload.aSymbol ?? null);
+  if (idx < 0) throw new Error('No matching rule found to delete');
+  rules.splice(idx, 1);
+
+  fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+}
+
+// Adds/removes one "Platform|AccountID" key from config.json's
+// "hidden-accounts" array (RuleEditForm's "Hide Account" button / Settings'
+// "Unhide" button) -- fully excludes that account from MainView's left
+// block (see trading-console's computeMainView/hiddenAccounts.js), separate
+// from and independent of any position-rule entry for it. Idempotent
+// either way: hiding an already-hidden account, or unhiding one that isn't
+// hidden, is a silent no-op rather than an error.
+function setAccountHidden(payload) {
+  const raw = fs.readFileSync(MATCH_RULES_CONFIG_FILE, 'utf8');
+  const configJson = JSON.parse(raw);
+  const key = `${payload.aPlatform}|${payload.aAccountId}`;
+  const existing = Array.isArray(configJson['hidden-accounts']) ? configJson['hidden-accounts'] : [];
+  const set = new Set(existing);
+  if (payload.hidden) set.add(key);
+  else set.delete(key);
+  configJson['hidden-accounts'] = [...set];
+
+  fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+}
+
 // JSON.stringify(_, null, 4) explodes every array onto its own lines, which
 // would turn a one-rule edit into a diff touching every rule in the file --
 // the opposite of the point of writing straight to the checked-in file.
@@ -413,6 +478,20 @@ function plPctFor(row) {
   return ((equity - initialBalance) / target) * 100;
 }
 
+// Same rule as trading-console's compute.js A_TPSLWarning: flag the account
+// if (a) neither a Take Profit nor a Stop Loss is set on any open position,
+// or (b) a Stop Loss specifically is missing while Daily Drawdown is
+// already at/above its own configured threshold -- a Take Profit alone
+// doesn't cover that risk. Returns a plain boolean; the tpsl metric below
+// turns that into 100/null so it can reuse the same tier-ladder machinery
+// as every ratio-based metric.
+function tpslWarning(row, thresholds) {
+  const noTpNoSl = !row._hasTakeProfit && !row._hasStopLoss;
+  const dailyDrawdownPct = ratioPct(row.TodayDrawdown, row.MaxDailyDrawdown);
+  const dailyDrawdownWarning = dailyDrawdownPct !== null && dailyDrawdownPct >= thresholds.dailyDrawdownPct;
+  return noTpNoSl || (dailyDrawdownWarning && !row._hasStopLoss);
+}
+
 // One entry per warning MainView can highlight. `priority`/`sound` are
 // Pushover fields (https://pushover.net/api#priority, #sounds) -- the two
 // drawdown (risk) alerts default louder/more urgent than the two
@@ -472,6 +551,26 @@ const WARNING_METRICS = [
       return `Equity-based PL has crossed ${tierPct}% of Profit Target (now ${p === null ? 'n/a' : Math.round(p) + '%'}).`;
     },
   },
+  {
+    // Mirrors MainView's "Warning TP/SL" blinking highlight (see
+    // compute.js's A_TPSLWarning) -- a boolean condition, not a
+    // percentage-vs-limit ratio like the four metrics above, so value()
+    // just returns 100 (warning) or null (no warning) against a fixed
+    // single-rung ladder ([thresholds.tpslPct], default 100). Still gets
+    // the same transition-only behavior as every other metric: notifies
+    // once when the condition first becomes true, stays quiet while it
+    // remains true, and re-arms if it clears and reappears later.
+    key: 'tpsl',
+    thresholdKey: 'tpslPct',
+    label: 'TP/SL',
+    priority: 1,
+    sound: 'siren',
+    value: (row, thresholds) => (tpslWarning(row, thresholds) ? 100 : null),
+    message: (row, _tierPct, thresholds) =>
+      !row._hasTakeProfit && !row._hasStopLoss
+        ? 'No Take Profit or Stop Loss set on any open position.'
+        : `Daily Drawdown has crossed ${thresholds.dailyDrawdownPct}% of Max Daily Drawdown and this account still has no Stop Loss set.`,
+  },
 ];
 
 // Never throws -- every failure mode (missing config, API error, network
@@ -517,16 +616,43 @@ async function sendPushover(title, message, { priority = 0, sound } = {}) {
 
 // One row per A-side account -- Balance/Equity/InitialBalance/etc. are
 // account-level fields duplicated across every PositionLog row for that
-// account, so the first row seen for each Platform+AccountID is enough
-// (no need to aggregate across positions the way compute.js's leftGroups
-// does for TotalSize/PositionPL, which aren't used by any warning check).
+// account, so the first row seen for each Platform+AccountID is enough (no
+// need to aggregate across positions the way compute.js's leftGroups does
+// for TotalSize/PositionPL, which aren't used by any warning check).
+//
+// StopLossPrice/TakeProfitPrice are the one exception -- those are
+// PER-POSITION fields, not account-level ones, so the first-row-wins
+// shortcut above would miss a Stop Loss set on an account's second open
+// position. `_hasTakeProfit`/`_hasStopLoss` are aggregated across every row
+// seen for that account (true if ANY open position has one set), same
+// any-position-counts approach as compute.js's hasTakeProfit/hasStopLoss --
+// underscore-prefixed since they're server-only additions, not real CSV
+// columns.
+//
+// Accounts hidden via config.json's "hidden-accounts" (RuleEditForm's "Hide
+// Account" button -- see setAccountHidden) are excluded here too, same as
+// MainView excludes them (see trading-console's computeMainView). An
+// account you've archived out of the dashboard shouldn't still buzz your
+// phone.
 function collectASideAccounts() {
+  let hiddenKeys;
+  try {
+    const configJson = JSON.parse(fs.readFileSync(MATCH_RULES_CONFIG_FILE, 'utf8'));
+    hiddenKeys = new Set(Array.isArray(configJson['hidden-accounts']) ? configJson['hidden-accounts'] : []);
+  } catch {
+    hiddenKeys = new Set();
+  }
+
   const seen = new Map();
   for (const platformKey of PLATFORM_ORDER) {
     for (const row of platformRows[platformKey]) {
       if (!NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
       const key = `${row.Platform}|${row.AccountID}`;
-      if (!seen.has(key)) seen.set(key, row);
+      if (hiddenKeys.has(key)) continue;
+      if (!seen.has(key)) seen.set(key, { ...row, _hasTakeProfit: false, _hasStopLoss: false });
+      const acct = seen.get(key);
+      if (row.TakeProfitPrice && row.TakeProfitPrice !== 'none') acct._hasTakeProfit = true;
+      if (row.StopLossPrice && row.StopLossPrice !== 'none') acct._hasStopLoss = true;
     }
   }
   return [...seen.values()];
@@ -569,7 +695,11 @@ function checkWarningsAndNotify() {
   for (const row of collectASideAccounts()) {
     for (const metric of metrics) {
       const ladder = tierLadderFor(metric, thresholds, cfg);
-      const currentIndex = tierIndexFor(metric.value(row), ladder);
+      // `thresholds` is passed through to value()/message() too -- only the
+      // tpsl metric actually uses it (its warning depends on
+      // dailyDrawdownPct, not just its own thresholdKey); every other
+      // metric's value()/message() ignores the extra argument.
+      const currentIndex = tierIndexFor(metric.value(row, thresholds), ladder);
       const stateKey = `${row.Platform}|${row.AccountID}|${metric.key}`;
       const lastIndex = tierState.has(stateKey) ? tierState.get(stateKey) : -1;
       // Only fires on a genuine climb to a new rung -- dropping back down
@@ -578,10 +708,11 @@ function checkWarningsAndNotify() {
       // behavior the old true/false version had at its one threshold.
       if (currentIndex > lastIndex) {
         const crossedTierPct = ladder[currentIndex];
-        sendPushover(`${row.Platform} ${row.AccountID} -- ${metric.label}`, metric.message(row, crossedTierPct), {
-          priority: metric.priority,
-          sound: metric.sound,
-        });
+        sendPushover(
+          `${row.Platform} ${row.AccountID} -- ${metric.label}`,
+          metric.message(row, crossedTierPct, thresholds),
+          { priority: metric.priority, sound: metric.sound }
+        );
       }
       tierState.set(stateKey, currentIndex);
     }
@@ -590,7 +721,7 @@ function checkWarningsAndNotify() {
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -680,6 +811,52 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: true }));
       } catch (err) {
         console.error('Failed to update config:', err);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+    });
+    return;
+  }
+
+  // RuleEditForm's "Delete" button -- removes the matched rule entirely
+  // instead of replacing it. Body shape is the identifying subset of
+  // /config/rule's payload: { aPlatform, aAccountId, aSymbol }.
+  if (req.method === 'DELETE' && req.url === '/config/rule') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (!payload.aPlatform || !payload.aAccountId) throw new Error('aPlatform and aAccountId are required');
+        deleteRule(payload);
+        console.log(`[${new Date().toISOString()}] config: deleted rule for ${payload.aPlatform}|${payload.aAccountId}${payload.aSymbol ? `|${payload.aSymbol}` : ''}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        console.error('Failed to delete rule:', err);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+    });
+    return;
+  }
+
+  // RuleEditForm's "Hide Account" button and SettingsPage's "Unhide"
+  // button both post here -- `hidden: true` adds the account to
+  // config.json's "hidden-accounts" array, `hidden: false` removes it.
+  if (req.method === 'POST' && req.url === '/config/account-visibility') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (!payload.aPlatform || !payload.aAccountId) throw new Error('aPlatform and aAccountId are required');
+        setAccountHidden(payload);
+        console.log(`[${new Date().toISOString()}] config: ${payload.hidden ? 'hid' : 'unhid'} account ${payload.aPlatform}|${payload.aAccountId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        console.error('Failed to update account visibility:', err);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: String(err) }));
       }

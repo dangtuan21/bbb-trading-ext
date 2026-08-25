@@ -84,20 +84,29 @@ const A_SIDE_PLATFORMS = new Set(["RebelsFunding", "AlphaCapital", "FTMO"])
  * row whose account+symbol has no rule, or whose rule's target isn't
  * present in the current data, still shows -- the B_ columns are just left
  * blank rather than dropping the row.
+ *
+ * `hiddenAccounts` (from data-fact/config.json via lib/hiddenAccounts.js)
+ * fully excludes an A-side account's row, unlike matchRules -- there's no
+ * rule that can do this, since a row shows regardless of whether it has a
+ * rule at all (see above). Filtered at the very start of the rows loop, so
+ * a hidden account never even enters leftGroups/left/joined.
  */
 export function computeMainView(
   rows,
   matchRules = [],
   warningDailyDrawdownPct = DEFAULT_WARNING_DAILY_DRAWDOWN_PCT,
   warningDrawdownPct = DEFAULT_WARNING_DRAWDOWN_PCT,
-  warningTargetProfitPct = DEFAULT_WARNING_TARGET_PROFIT_PCT
+  warningTargetProfitPct = DEFAULT_WARNING_TARGET_PROFIT_PCT,
+  hiddenAccounts = []
 ) {
+  const hiddenKeys = new Set(hiddenAccounts.map((h) => `${h.platform}|${h.accountId}`))
   const leftGroups = new Map()
   for (const row of rows) {
     if (!A_SIDE_PLATFORMS.has(row.Platform)) continue
     // Keyed by Platform+AccountID, not AccountID alone, since more than one
     // platform can land on the left.
     const key = `${row.Platform}|${row.AccountID}`
+    if (hiddenKeys.has(key)) continue
     if (!leftGroups.has(key)) {
       leftGroups.set(key, {
         Platform: row.Platform,
@@ -108,7 +117,9 @@ export function computeMainView(
         AccountPL: row.AccountPL,
         InitialBalance: row.InitialBalance,
         MaxDailyDrawdown: row.MaxDailyDrawdown,
+        MaxDailyDrawdownPct: row.MaxDailyDrawdownPct,
         TodayDrawdown: row.TodayDrawdown,
+        TodayDrawdownPct: row.TodayDrawdownPct,
         MaxDrawdownAmount: row.MaxDrawdownAmount,
         MaxDrawdownPct: row.MaxDrawdownPct,
         CurrentValueAmount: row.CurrentValueAmount,
@@ -120,6 +131,8 @@ export function computeMainView(
         positionPL: 0,
         hasTakeProfit: false,
         hasStopLoss: false,
+        stopLossRisk: 0,
+        stopLossRiskKnown: false,
       })
     }
     const g = leftGroups.get(key)
@@ -134,8 +147,21 @@ export function computeMainView(
     // anything else is a real price. An account with multiple open
     // positions is flagged true if ANY of them has one set, same
     // aggregate-across-positions approach as Symbol/Direction above.
-    if (row.TakeProfit && row.TakeProfit !== "none") g.hasTakeProfit = true
-    if (row.StopLoss && row.StopLoss !== "none") g.hasStopLoss = true
+    if (row.TakeProfitPrice && row.TakeProfitPrice !== "none") g.hasTakeProfit = true
+    if (row.StopLossPrice && row.StopLossPrice !== "none") g.hasStopLoss = true
+    // Sums this position's own dollar Stop Loss risk (see
+    // stopLossRiskAmount below) into the account's total. A position whose
+    // risk can't be computed (no Stop Loss set, or the price hasn't moved
+    // from Opening yet) just contributes nothing to the sum -- so an
+    // account with one un-computable position among several shows a total
+    // that's a LOWER BOUND on its real risk, not "no risk". stopLossRiskKnown
+    // tracks whether at least one position contributed, so the account-level
+    // total can stay blank rather than a misleading 0 when none did.
+    const risk = stopLossRiskAmount(row)
+    if (risk !== null) {
+      g.stopLossRisk += risk
+      g.stopLossRiskKnown = true
+    }
   }
 
   const left = [...leftGroups.values()].map((g) => ({
@@ -147,7 +173,9 @@ export function computeMainView(
     AccountPL: g.AccountPL,
     InitialBalance: g.InitialBalance,
     MaxDailyDrawdown: g.MaxDailyDrawdown,
+    MaxDailyDrawdownPct: g.MaxDailyDrawdownPct,
     TodayDrawdown: g.TodayDrawdown,
+    TodayDrawdownPct: g.TodayDrawdownPct,
     MaxDrawdownAmount: g.MaxDrawdownAmount,
     MaxDrawdownPct: g.MaxDrawdownPct,
     CurrentValueAmount: g.CurrentValueAmount,
@@ -159,6 +187,8 @@ export function computeMainView(
     PositionPL: round2(g.positionPL),
     hasTakeProfit: g.hasTakeProfit,
     hasStopLoss: g.hasStopLoss,
+    stopLossRisk: g.stopLossRisk,
+    stopLossRiskKnown: g.stopLossRiskKnown,
   }))
 
   const accountLog = computeAccountLog(rows)
@@ -286,6 +316,19 @@ export function computeMainView(
     // is missing/non-numeric or A_ProfitTarget is 0. Computed ahead of the
     // push below so it can also feed A_PLPctWarning.
     const plPct = pctOf(subMoney(l.Equity, l.InitialBalance), l.ProfitTarget)
+    // Computed ahead of the push below so it can also feed A_TPSLWarning --
+    // once Daily DD is already flagged, a missing Stop Loss is a bigger
+    // deal than usual, so that same warning state widens what counts as a
+    // TP/SL problem (see A_TPSLWarning below).
+    const dailyDrawdownWarning = isRatioWarning(l.MaxDailyDrawdown, l.TodayDrawdown, warningDailyDrawdownPct)
+    // No open position at all (A_Symbol is "n/a") -- suppress every
+    // highlightIf-driven warning for this row rather than let stale
+    // account-level numbers (last known Balance/Equity/DD figures, still
+    // carried on the account even with nothing open) flag it. Most
+    // visible on A_TPSLWarning, which would otherwise ALWAYS fire for a
+    // no-position account (hasTakeProfit/hasStopLoss are both false with
+    // nothing open) even though there's no position to have a TP/SL on.
+    const hasOpenPosition = l.Symbol !== "n/a"
     joined.push({
       A_Platform: l.Platform,
       A_AccountID: l.AccountID,
@@ -303,8 +346,34 @@ export function computeMainView(
       // Take Profit and a Stop Loss set, "TP"/"SL" if only one of the two,
       // "" if neither -- see hasTakeProfit/hasStopLoss above.
       A_TPSL: tpSlLabel(l.hasTakeProfit, l.hasStopLoss),
+      // Flags the TP/SL cell for a warning two ways: (a) neither a Take
+      // Profit nor a Stop Loss is set at all, or (b) a Stop Loss
+      // specifically is missing WHILE Daily DD is already flagged -- once
+      // today's drawdown is closing in on the daily limit, an account with
+      // no Stop Loss (even one with a Take Profit set) is a real risk, not
+      // just a missing-both-brackets housekeeping nit.
+      A_TPSLWarning: hasOpenPosition && ((!l.hasTakeProfit && !l.hasStopLoss) || (dailyDrawdownWarning && !l.hasStopLoss)),
+      // Dollar amount at risk across this account's open position(s) if
+      // every set Stop Loss were hit -- see stopLossRiskAmount below.
+      // Blank (not 0) when it can't be computed for ANY open position, and
+      // a lower bound (not the true total) when it's a mix of computable
+      // and un-computable positions -- see the accumulation comment above.
+      A_StopLossRiskAmount: l.stopLossRiskKnown ? round2(l.stopLossRisk) : "",
+      // Same figure as a % of the account's Balance -- "how much of this
+      // account is on the line if every stop hits", comparable across
+      // accounts/symbols the same way A PL % is, unlike a raw $ amount.
+      A_StopLossRiskPct: l.stopLossRiskKnown ? pctOf(l.stopLossRisk, l.Balance) : "",
       A_MaxDailyDrawdown: l.MaxDailyDrawdown || "",
+      // The platform's OWN Max Daily Drawdown %/Today's Drawdown % (as
+      // scraped verbatim -- see MaxDailyDrawdownPct/TodayDrawdownPct in
+      // ext-rebelsfunding/background.js), NOT the same ratio
+      // A_DailyDrawdownWarning uses below (Today's Drawdown / Max Daily
+      // Drawdown vs. the configured threshold) -- RebelsFunding's own %
+      // is Today's Drawdown / Today's Starting Equity, a different
+      // denominator. Shown as-is for reference; no highlightIf of its own.
+      A_MaxDailyDrawdownPct: l.MaxDailyDrawdownPct || "",
       A_TodayDrawdown: l.TodayDrawdown || "",
+      A_TodayDrawdownPct: l.TodayDrawdownPct || "",
       A_MaxDrawdownAmount: l.MaxDrawdownAmount || "",
       A_MaxDrawdownPct: l.MaxDrawdownPct || "",
       A_CurrentValueAmount: l.CurrentValueAmount || "",
@@ -313,22 +382,22 @@ export function computeMainView(
       // today's realized drawdown reaches the configured % of the
       // platform's own daily limit -- an early heads-up well before the
       // account is actually at risk of breaching it.
-      A_DailyDrawdownWarning: isRatioWarning(l.MaxDailyDrawdown, l.TodayDrawdown, warningDailyDrawdownPct),
+      A_DailyDrawdownWarning: hasOpenPosition && dailyDrawdownWarning,
       // Same idea, but for the contest-wide Max DD/Cur DD cells -- flags
       // once cumulative drawdown reaches the configured % of the overall
       // (not just daily) drawdown limit.
-      A_MaxDrawdownWarning: isRatioWarning(l.MaxDrawdownAmount, l.CurrentValueAmount, warningDrawdownPct),
+      A_MaxDrawdownWarning: hasOpenPosition && isRatioWarning(l.MaxDrawdownAmount, l.CurrentValueAmount, warningDrawdownPct),
       // Flags the A Target PL/A Account PL cells once current profit
       // (AccountPL) reaches the configured % of the account's Profit
       // Target -- an early heads-up that the account is closing in on
       // passing its challenge. Same ratio check as the two drawdown
       // warnings above, just applied to a "getting close to a goal"
       // pairing instead of a "getting close to a limit" one.
-      A_TargetProfitWarning: isRatioWarning(l.ProfitTarget, l.AccountPL, warningTargetProfitPct),
+      A_TargetProfitWarning: hasOpenPosition && isRatioWarning(l.ProfitTarget, l.AccountPL, warningTargetProfitPct),
       // Flags just the A PL % cell once A_PLPct itself reaches the
       // configured % -- a direct value-vs-threshold check (A_PLPct is
       // already a percentage), unlike the ratio-of-two-amounts checks above.
-      A_PLPctWarning: isPctWarning(plPct, warningTargetProfitPct),
+      A_PLPctWarning: hasOpenPosition && isPctWarning(plPct, warningTargetProfitPct),
       A_PositionPL: l.PositionPL,
       Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
@@ -365,6 +434,38 @@ function tpSlLabel(hasTakeProfit, hasStopLoss) {
   if (hasTakeProfit) return "TP"
   if (hasStopLoss) return "SL"
   return ""
+}
+
+// Dollar Stop Loss risk for ONE PositionLog row -- how much this position
+// would lose if price reached its StopLossPrice. Derives an implied
+// $-per-price-unit rate from the position's own live numbers (PositionPL /
+// (Latest - Opening)) rather than a per-symbol pip-size/contract-size
+// lookup table: that rate already reflects whatever the platform actually
+// pays per unit of price movement for this exact position (contract size,
+// leverage, even quote-currency conversion), so applying it to the
+// distance from Opening to StopLossPrice gives an exact dollar figure with
+// no maintenance burden as new symbols get traded. Both differences are
+// abs()'d, so the result is a magnitude regardless of Direction (Buy vs
+// Sell) or whether the Stop Loss happens to be configured on the "wrong"
+// side of Opening.
+//
+// Returns null (not computable, not "no risk") when: no Stop Loss is set;
+// Opening/Latest/StopLossPrice/PositionPL aren't all present and numeric;
+// or Latest === Opening -- the position hasn't moved from its entry price
+// yet, so the $-per-price-unit rate is an undefined 0/0. That last case is
+// usually just a snapshot taken right after the position opened, and
+// resolves itself on the next scrape once price has moved at all.
+function stopLossRiskAmount(row) {
+  if (!row.StopLossPrice || row.StopLossPrice === "none") return null
+  const opening = toNumber(row.Opening)
+  const latest = toNumber(row.Latest)
+  const stopLoss = toNumber(row.StopLossPrice)
+  const positionPL = toNumber(row.PositionPL)
+  if (opening === null || latest === null || stopLoss === null || positionPL === null) return null
+  const priceMove = latest - opening
+  if (priceMove === 0) return null
+  const dollarPerPriceUnit = positionPL / priceMove
+  return Math.abs(dollarPerPriceUnit) * Math.abs(opening - stopLoss)
 }
 
 // Shared by A_DailyDrawdownWarning (Max Daily DD/Cur Daily DD, driven by
@@ -420,11 +521,13 @@ export function formatMoney(value) {
   return n < 0 ? `-${formatted}` : formatted
 }
 
-// Rounds to the nearest whole number and appends "%" -- e.g. 94.27 -> "94%".
-// Used for ratio columns like A_PLPct where sub-percent precision isn't
-// useful at a glance.
+// Up to 1 decimal place, trailing zero trimmed, and appends "%" -- e.g.
+// 5 -> "5%", 1.7 -> "1.7%", -54.18 -> "-54.2%" (rounds to 1 place first,
+// then drops the decimal entirely when it's not meaningful, i.e. ".0").
+// Used for every `pct: true` column (A_PLPct, A_MaxDailyDrawdownPct,
+// A_TodayDrawdownPct, A_StopLossRiskPct).
 export function formatPct(value) {
   const n = toNumber(value)
   if (n === null) return value ?? ""
-  return `${Math.round(n)}%`
+  return `${parseFloat(n.toFixed(1))}%`
 }

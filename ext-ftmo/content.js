@@ -16,13 +16,6 @@ const LABEL_VARIANTS = {
   balance: ['Balance', 'Account Balance', 'Starting Balance'],
   equity: ['Equity', 'Current Equity', 'Account Equity'],
   pl: ['Unrealized PnL', 'Unrealized P/L', 'P&L', 'P/L', 'Profit', 'Total P&L', 'Account P&L'],
-  // Same CSV columns RebelsFunding's Contest stats tab already feeds
-  // (MaxDailyDrawdown/TodayDrawdown -- "Max Daily DD"/"Cur Daily DD" in
-  // MainView) -- FTMO's own "Today's permitted loss"/"Today's profit"
-  // cards are this account's equivalent figures. Both apostrophe forms
-  // covered defensively, same as this file's other multi-variant labels.
-  maxDailyDrawdown: ["Today's permitted loss", "Today’s permitted loss", 'Todays permitted loss'],
-  todayDrawdown: ["Today's profit", "Today’s profit", 'Todays profit'],
 };
 
 const ORDER_ID_RE = /^\d{5,}$/;
@@ -33,6 +26,23 @@ const BARE_NUMBER_RE = /^-?\d+(\.\d+)?$/;
 
 function money(s) {
   return (s || '').replace('$', '').replace(/,/g, '').trim();
+}
+
+// MaxDailyDrawdown/TodayDrawdown as a % of account Balance -- unlike
+// RebelsFunding, FTMO's own page doesn't expose these two percentages
+// anywhere to scrape directly (the Objectives table's own inline "(-0.1%)"
+// alongside the Result $ figure uses some other, unconfirmed FTMO-internal
+// denominator), so these are CALCULATED here instead, from the two dollar
+// columns already scraped (see parseMaxDailyLoss above) divided by Balance.
+// Two independent percentages -- each answers "how big is this $ figure
+// relative to account size" -- same style as RebelsFunding's own scraped
+// Max Daily Drawdown %/Today's Drawdown %, just computed rather than read
+// off the page. Blank (not "0") when Balance isn't available yet.
+function pctOf(dollarAmount, balance) {
+  const n = parseFloat(dollarAmount);
+  const d = parseFloat(balance);
+  if (Number.isNaN(n) || Number.isNaN(d) || d === 0) return '';
+  return ((n / d) * 100).toFixed(2);
 }
 
 function valueAfterAny(lines, labels) {
@@ -57,6 +67,33 @@ function parseMaxLoss(lines) {
     }
   }
   return '';
+}
+
+// "Max Daily Loss: -$500" (the Objectives table's own row, same "label:
+// value" link pattern as "Max Loss:" above) paired with that SAME row's
+// "Result" column value, which renders as the line right after the label
+// in document order (e.g. "-$11.50 (-0.1%)") -- confirmed live via a real
+// screenshot of the Objectives table (Trading Objectives | Result |
+// Summary columns). Maps to the same MaxDailyDrawdown/TodayDrawdown
+// columns ("Max Daily DD"/"Cur Daily DD" in MainView) RebelsFunding's own
+// Contest stats tab already feeds -- both stored as positive dollar
+// magnitudes for consistency with that convention, even though this page
+// renders both as negative ("-$500", "-$11.50"). Only the dollar figure is
+// kept from the Result cell; the "(-0.1%)" alongside it is FTMO's own %
+// (a different denominator than MainView's ratio-based warning, same
+// caveat as RebelsFunding's scraped Max Daily Drawdown %/Today's Drawdown
+// %) and isn't captured here.
+function parseMaxDailyLoss(lines) {
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith('Max Daily Loss:')) continue;
+    const limitMatch = /-?\$?\s*([\d,]+(?:\.\d+)?)/.exec(lines[i].slice('Max Daily Loss:'.length));
+    const maxDailyDrawdown = limitMatch ? limitMatch[1].replace(/,/g, '') : '';
+    const resultLine = lines[i + 1] || '';
+    const resultMatch = /^-?\$?\s*([\d,]+(?:\.\d+)?)/.exec(resultLine);
+    const todayDrawdown = resultMatch ? resultMatch[1].replace(/,/g, '') : '';
+    return { maxDailyDrawdown, todayDrawdown };
+  }
+  return { maxDailyDrawdown: '', todayDrawdown: '' };
 }
 
 // "AUDUSD.sim" -> "AUD/USD". Already-slashed or unrecognized formats pass
@@ -86,10 +123,14 @@ function parseAccountSummary(lines) {
   // LABEL_VARIANTS.pl) -- no Equity-Balance fallback if none of those
   // labels are found; left blank rather than derived.
   const accountPL = money(valueAfterAny(lines, LABEL_VARIANTS.pl));
-  const maxDailyDrawdown = money(valueAfterAny(lines, LABEL_VARIANTS.maxDailyDrawdown));
-  const todayDrawdown = money(valueAfterAny(lines, LABEL_VARIANTS.todayDrawdown));
+  const { maxDailyDrawdown, todayDrawdown } = parseMaxDailyLoss(lines);
+  const maxDailyDrawdownPct = pctOf(maxDailyDrawdown, balance);
+  const todayDrawdownPct = pctOf(todayDrawdown, balance);
   const maxDrawdownAmount = parseMaxLoss(lines);
-  return { balance, equity, accountPL, maxDailyDrawdown, todayDrawdown, maxDrawdownAmount };
+  return {
+    balance, equity, accountPL, maxDailyDrawdown, maxDailyDrawdownPct,
+    todayDrawdown, todayDrawdownPct, maxDrawdownAmount,
+  };
 }
 
 // Anchors on each Symbol match and searches a small window of nearby lines
@@ -150,8 +191,8 @@ function parseOpenTrades(lines) {
       SizeUnit: 'lot',
       Opening: 'n/a',
       Latest: 'n/a',
-      StopLoss: 'none',
-      TakeProfit: 'none',
+      StopLossPrice: 'none',
+      TakeProfitPrice: 'none',
       PositionPL: pnl,
     });
   }
@@ -191,14 +232,16 @@ function buildRows(summary, positions) {
     Equity: summary.equity,
     AccountPL: summary.accountPL,
     MaxDailyDrawdown: summary.maxDailyDrawdown,
+    MaxDailyDrawdownPct: summary.maxDailyDrawdownPct,
     TodayDrawdown: summary.todayDrawdown,
+    TodayDrawdownPct: summary.todayDrawdownPct,
     MaxDrawdownAmount: summary.maxDrawdownAmount,
   };
 
   if (!positions.length) {
     return [{
       ...base, PosID: 'n/a', Symbol: 'n/a', Direction: 'n/a', Size: 'n/a', SizeUnit: 'n/a',
-      Opening: 'n/a', Latest: 'n/a', StopLoss: 'none', TakeProfit: 'none', PositionPL: summary.accountPL,
+      Opening: 'n/a', Latest: 'n/a', StopLossPrice: 'none', TakeProfitPrice: 'none', PositionPL: summary.accountPL,
     }];
   }
   return positions.map((p) => ({ ...base, ...p }));
@@ -227,13 +270,12 @@ async function captureFtmoRows() {
     ? { reason: 'balance-not-found', scrolled, hasBalanceText: document.body.innerText.includes('Balance'), hasOpenTradesText: document.body.innerText.includes('Open trades'), url: location.href }
     : null;
 
-  // Debug aid: "Today's permitted loss"/"Today's profit"/"Max Loss:" are
-  // unconfirmed guesses at the real label text (from screenshots, not a
-  // live DOM check) -- if any doesn't match, surface every line that
-  // plausibly relates (the regex already covers "Max Loss:" too, via
-  // "loss") so the real label can be read off directly instead of guessed
-  // again blind, same approach that nailed down RebelsFunding's real
-  // "Today's Drawdown" label.
+  // Debug aid: "Max Daily Loss:"/"Max Loss:" are confirmed live (via a real
+  // screenshot of the Objectives table) -- if either stops matching (a
+  // wording change, etc.), surface every line that plausibly relates so the
+  // real label/layout can be read off directly instead of guessed blind,
+  // same approach that nailed down RebelsFunding's real "Today's Drawdown"
+  // label.
   const drawdownDiag = !summary.maxDailyDrawdown || !summary.todayDrawdown || !summary.maxDrawdownAmount
     ? { reason: 'drawdown-labels-not-found', nearbyLines: lines.filter((l) => /permitted|profit|loss/i.test(l)) }
     : null;

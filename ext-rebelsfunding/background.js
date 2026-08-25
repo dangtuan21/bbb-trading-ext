@@ -467,6 +467,22 @@ function fnScrapeContestStats() {
     if (maxDdIdx >= 0) maxDdContext = lines.slice(maxDdIdx, maxDdIdx + 8);
   }
 
+  // Max Daily Drawdown % / Today's Drawdown % -- same positionally-read
+  // 6-line block shape as Max Drawdown/Current Value below (label, "$
+  // amount", "N %", next label, amount, pct). Read positionally purely to
+  // get at the two % lines; maxDailyDrawdown/todayDrawdown themselves stay
+  // on the proven valueAfterLabel path above so this addition can't
+  // regress an already-working field. Note: these are the platform's OWN
+  // percentages (Today's Drawdown / Today's Starting Equity), NOT the same
+  // ratio the dashboard's own Daily DD warning uses (Today's Drawdown / Max
+  // Daily Drawdown) -- captured as-is for reference, not fed into warning
+  // logic.
+  const maxDailyDrawdownIdx = lines.findIndex((l) => l.startsWith('Max Daily Drawdown'));
+  const maxDailyDrawdownBlock = maxDailyDrawdownIdx >= 0 ? lines.slice(maxDailyDrawdownIdx, maxDailyDrawdownIdx + 6) : [];
+  const todayDrawdownLabelOk = (maxDailyDrawdownBlock[3] || '').startsWith("Today's Drawdown");
+  const maxDailyDrawdownPct = pctVal(maxDailyDrawdownBlock[2]);
+  const todayDrawdownPct = todayDrawdownLabelOk ? pctVal(maxDailyDrawdownBlock[5]) : '';
+
   // Contest-wide Max Drawdown / Current Value -- structurally the same
   // 6-line block as Max Daily Drawdown / Today's Drawdown (label, "$
   // amount", "N %", next label, amount, pct, all contiguous -- confirmed
@@ -496,7 +512,9 @@ function fnScrapeContestStats() {
     initialBalance: moneyVal(valueAfterLabel('Initial Balance')),
     startingEquity: moneyVal(valueAfterLabel('Starting Equity')),
     maxDailyDrawdown: moneyVal(valueAfterLabel('Max Daily Drawdown')),
+    maxDailyDrawdownPct,
     todayDrawdown,
+    todayDrawdownPct,
     maxDrawdownAmount: moneyVal(maxDrawdownBlock[1]),
     maxDrawdownPct: pctVal(maxDrawdownBlock[2]),
     currentValueAmount: currentValueLabelOk ? moneyVal(maxDrawdownBlock[4]) : '',
@@ -504,6 +522,10 @@ function fnScrapeContestStats() {
     profitTarget: moneyVal(profitTargetBlock[1]),
     profitTargetPct: pctVal(profitTargetBlock[2]),
     maxDdContext,
+    // Fires whenever the positional read above didn't land on "Today's
+    // Drawdown" as expected (line 4 of the block), so the real block layout
+    // can be read off directly -- same debugging pattern as maxDdContext.
+    todayDrawdownPctContext: maxDailyDrawdownIdx >= 0 && !todayDrawdownLabelOk ? maxDailyDrawdownBlock : null,
     // Same debug aid as maxDdContext, but anchored on Max Drawdown -- fires
     // whenever the positional read above didn't land on "Current Value" as
     // expected, so the real block layout can be read off directly.
@@ -530,7 +552,7 @@ async function fnScrapePositions() {
     return !t || t === '-' || t === '--' || t === 'n/a' ? 'none' : t;
   }
   // Class-to-text map for one row's direct "*-info" cells -- lets a wrong
-  // field mapping (e.g. StopLoss/TakeProfit swapped) be confirmed directly
+  // field mapping (e.g. StopLossPrice/TakeProfitPrice swapped) be confirmed directly
   // against the real class names instead of guessing blind, same technique
   // that found tastyfx's P/L column bug.
   function sampleCellMap(row) {
@@ -569,8 +591,8 @@ async function fnScrapePositions() {
         SizeUnit: 'lot',
         Opening: field(row, '.open-price-info .main-info'),
         Latest: field(row, '.price-info .main-info'),
-        StopLoss: slTp(field(row, '.sl-info .main-info')),
-        TakeProfit: slTp(field(row, '.tp-info .main-info')),
+        StopLossPrice: slTp(field(row, '.sl-info .main-info')),
+        TakeProfitPrice: slTp(field(row, '.tp-info .main-info')),
         PositionPL: money(field(row, '.total-info .main-info')),
         _plNotReady: notReady,
       });
@@ -690,10 +712,11 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
   await sleep(1500);
   await execInFrame(tabId, targetFrameId, fnDismissModals).catch(() => {});
   const contestStats = await execInFrame(tabId, targetFrameId, fnScrapeContestStats).catch(() => ({
-    initialBalance: '', startingEquity: '', maxDailyDrawdown: '', todayDrawdown: '',
+    initialBalance: '', startingEquity: '', maxDailyDrawdown: '', maxDailyDrawdownPct: '',
+    todayDrawdown: '', todayDrawdownPct: '',
     maxDrawdownAmount: '', maxDrawdownPct: '', currentValueAmount: '', currentValuePct: '',
     profitTarget: '', profitTargetPct: '',
-    maxDdContext: null, maxDrawdownContext: null, profitTargetContext: null,
+    maxDdContext: null, todayDrawdownPctContext: null, maxDrawdownContext: null, profitTargetContext: null,
   }));
 
   const clickResult = await execInFrame(tabId, targetFrameId, fnClickPositionsTab).catch(() => null);
@@ -712,7 +735,9 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
     initialBalance: contestStats.initialBalance || '',
     startingEquity: contestStats.startingEquity || '',
     maxDailyDrawdown: contestStats.maxDailyDrawdown || '',
+    maxDailyDrawdownPct: contestStats.maxDailyDrawdownPct || '',
     todayDrawdown: contestStats.todayDrawdown || '',
+    todayDrawdownPct: contestStats.todayDrawdownPct || '',
     maxDrawdownAmount: contestStats.maxDrawdownAmount || '',
     maxDrawdownPct: contestStats.maxDrawdownPct || '',
     currentValueAmount: contestStats.currentValueAmount || '',
@@ -730,6 +755,7 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
       stillNotReady: scraped.anyNotReady,
       error: scraped.error,
       maxDdContext: contestStats.maxDdContext,
+      todayDrawdownPctContext: contestStats.todayDrawdownPctContext,
       maxDrawdownContext: contestStats.maxDrawdownContext,
       profitTargetContext: contestStats.profitTargetContext,
     },
@@ -827,7 +853,9 @@ async function scrapeAccount(scanTabId, acc) {
   let initialBalance = '';
   let startingEquity = '';
   let maxDailyDrawdown = '';
+  let maxDailyDrawdownPct = '';
   let todayDrawdown = '';
+  let todayDrawdownPct = '';
   let maxDrawdownAmount = '';
   let maxDrawdownPct = '';
   let currentValueAmount = '';
@@ -865,7 +893,9 @@ async function scrapeAccount(scanTabId, acc) {
         if (result.initialBalance) initialBalance = result.initialBalance;
         if (result.startingEquity) startingEquity = result.startingEquity;
         if (result.maxDailyDrawdown) maxDailyDrawdown = result.maxDailyDrawdown;
+        if (result.maxDailyDrawdownPct) maxDailyDrawdownPct = result.maxDailyDrawdownPct;
         if (result.todayDrawdown) todayDrawdown = result.todayDrawdown;
+        if (result.todayDrawdownPct) todayDrawdownPct = result.todayDrawdownPct;
         if (result.maxDrawdownAmount) maxDrawdownAmount = result.maxDrawdownAmount;
         if (result.maxDrawdownPct) maxDrawdownPct = result.maxDrawdownPct;
         if (result.currentValueAmount) currentValueAmount = result.currentValueAmount;
@@ -900,7 +930,9 @@ async function scrapeAccount(scanTabId, acc) {
     InitialBalance: initialBalance,
     StartingEquity: startingEquity,
     MaxDailyDrawdown: maxDailyDrawdown,
+    MaxDailyDrawdownPct: maxDailyDrawdownPct,
     TodayDrawdown: todayDrawdown,
+    TodayDrawdownPct: todayDrawdownPct,
     MaxDrawdownAmount: maxDrawdownAmount,
     MaxDrawdownPct: maxDrawdownPct,
     CurrentValueAmount: currentValueAmount,
@@ -912,7 +944,7 @@ async function scrapeAccount(scanTabId, acc) {
     return {
       rows: [{
         ...base, PosID: 'n/a', Symbol: 'n/a', Direction: 'n/a', Size: 'n/a', SizeUnit: 'n/a',
-        Opening: 'n/a', Latest: 'n/a', StopLoss: 'none', TakeProfit: 'none', PositionPL: accountPL,
+        Opening: 'n/a', Latest: 'n/a', StopLossPrice: 'none', TakeProfitPrice: 'none', PositionPL: accountPL,
       }],
       diag,
     };
@@ -940,10 +972,11 @@ function _blankRowForAccount(acc) {
   return {
     SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
     AccountLabel: acc.program, IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
-    InitialBalance: '', StartingEquity: '', MaxDailyDrawdown: '', TodayDrawdown: '',
+    InitialBalance: '', StartingEquity: '', MaxDailyDrawdown: '', MaxDailyDrawdownPct: '',
+    TodayDrawdown: '', TodayDrawdownPct: '',
     MaxDrawdownAmount: '', MaxDrawdownPct: '', CurrentValueAmount: '', CurrentValuePct: '',
     PosID: '', Symbol: '', Direction: '', Size: '', SizeUnit: '', Opening: '', Latest: '',
-    StopLoss: '', TakeProfit: '', PositionPL: '',
+    StopLossPrice: '', TakeProfitPrice: '', PositionPL: '',
   };
 }
 

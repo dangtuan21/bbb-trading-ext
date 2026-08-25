@@ -7,6 +7,7 @@ import { usePositionLog } from "./lib/usePositionLog"
 import { useRelativeTime } from "./lib/relativeTime"
 import { computeAccountLog, computeMainView } from "./lib/compute"
 import { matchRules } from "./lib/matchRules"
+import { hiddenAccounts } from "./lib/hiddenAccounts"
 import { POSITIONLOG_FIELDS } from "./lib/schema"
 import {
   useWarningDailyDrawdownThreshold,
@@ -55,17 +56,36 @@ const ACCOUNTLOG_COLUMNS = [
 // A_PLPct itself reaches Warning Target Profit %), same amber highlight as
 // every other warning column when triggered.
 //
-// A_TPSL's highlightIf flags an EMPTY cell (no Take Profit or Stop Loss set
-// on any open position) rather than a value crossing a threshold -- gated
-// by the "Warning TP/SL" Settings toggle (useWarningTPSLEnabled), so it's
-// swapped out for `undefined` in App() below when the toggle is off.
+// A_TPSL's highlightIf (A_TPSLWarning, computed in compute.js) flags two
+// cases: neither a Take Profit nor a Stop Loss is set at all, OR a Stop
+// Loss specifically is missing while Daily DD is already flagged (a Take
+// Profit alone doesn't cover that risk) -- gated by the "Warning TP/SL"
+// Settings toggle (useWarningTPSLEnabled), so it's swapped out for
+// `undefined` in App() below when the toggle is off.
+//
+// A_StopLossRiskAmount/A_StopLossRiskPct ("SL Risk $"/"SL Risk %") --
+// computed in compute.js (the account's total dollar exposure if every open
+// position's Stop Loss were hit, and that same figure as a % of Balance),
+// but not shown as MainView columns right now -- hidden here rather than
+// removed from compute.js, so they're easy to bring back later.
+//
+// A_MaxDailyDrawdownPct/A_TodayDrawdownPct ("Max Daily DD %"/"Cur Daily
+// DD %") -- RebelsFunding's OWN percentages for the pair right before them
+// (Max Daily DD/Cur Daily DD), scraped verbatim rather than derived. NOT
+// the same ratio that drives A_DailyDrawdownWarning's highlightIf (Cur
+// Daily DD / Max Daily DD vs. the configured threshold) -- the platform's
+// own % uses Today's Starting Equity as the denominator instead, so it can
+// read differently from the $ pair's warning state. No highlightIf of
+// their own; given a distinct rose background (rather than reusing the $
+// pair's amber) precisely because they can disagree with it -- sharing a
+// color would visually imply they're always in sync.
 const MAINVIEW_COLUMNS = [
   { key: "A_Platform", label: "A Platform" },
   { key: "A_AccountID", label: "A Account ID", link: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Direction" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
-  { key: "A_TPSL", label: "TP/SL", highlightIf: (row) => row.A_TPSL === "" },
+  { key: "A_TPSL", label: "TP/SL", highlightIf: (row) => row.A_TPSLWarning },
   { key: "A_TargetEquity", label: "A Target Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
   { key: "A_Equity", label: "A Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
   { key: "A_PLPct", label: "A PL %", numeric: true, pct: true, highlightIf: (row) => row.A_PLPctWarning },
@@ -73,6 +93,8 @@ const MAINVIEW_COLUMNS = [
   { key: "A_AccountPL", label: "A Account PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "A_MaxDailyDrawdown", label: "Max Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
   { key: "A_TodayDrawdown", label: "Cur Daily DD", money: true, highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
+  { key: "A_MaxDailyDrawdownPct", label: "Max Daily DD %", numeric: true, pct: true, headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
+  { key: "A_TodayDrawdownPct", label: "Cur Daily DD %", numeric: true, pct: true, headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
   { key: "A_MaxDrawdownAmount", label: "Max DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
   { key: "A_CurrentValueAmount", label: "Cur DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
   { key: "A_PositionPL", label: "A P&L", money: true },
@@ -93,7 +115,15 @@ export default function App() {
 
   const accountLogRows = useMemo(() => computeAccountLog(rows), [rows])
   const mainView = useMemo(
-    () => computeMainView(rows, matchRules, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct),
+    () =>
+      computeMainView(
+        rows,
+        matchRules,
+        warningDailyDrawdownPct,
+        warningDrawdownPct,
+        warningTargetProfitPct,
+        hiddenAccounts
+      ),
     [rows, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct]
   )
 
@@ -151,6 +181,7 @@ export default function App() {
             onWarningTargetProfitChange={setWarningTargetProfitPct}
             warningTPSLEnabled={warningTPSLEnabled}
             onWarningTPSLChange={setWarningTPSLEnabled}
+            hiddenAccounts={hiddenAccounts}
           />
         )}
 
@@ -165,11 +196,19 @@ export default function App() {
         )}
 
         {status === "ready" && active === "mainview" && (
+          // rowBg dims a no-open-position account (A_Symbol is "n/a") to a
+          // flat light gray across the whole row -- same rows whose warnings
+          // are already suppressed in compute.js (hasOpenPosition), so this
+          // just makes that "nothing to see here" state visually obvious
+          // too, instead of a merely-unhighlighted row that still displays
+          // the same violet/emerald/amber/sky/rose column tints as a live
+          // account.
           <DataTable
             columns={mainViewColumns}
             rows={mainView.joined}
             emptyMessage="No RebelsFunding, FTMO, or AlphaCapital accounts in this snapshot yet."
             onRowClick={setEditingRow}
+            rowBg={(row) => (row.A_Symbol === "n/a" ? "bg-gray-400" : "")}
           />
         )}
 

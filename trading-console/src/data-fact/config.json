@@ -42,12 +42,6 @@
             "match-B-position": "tastyfx|DTEN3|EUR/GBP"
         },
         {
-            "A-position": "AlphaCapital|5103701|AUD/CHF",
-            "match-B-position": "tastyfx|DTEN3|AUD/CHF",
-            "A-DailyDrawdown": -400,
-            "Note": "Fail: DD"
-        },
-        {
             "A-position": "RebelsFunding|RF-054-45234|AUD/CAD",
             "match-B-position": "tastyfx|DTEN3|AUD/CAD"
         },
@@ -65,8 +59,8 @@
             "match-B-position": "tastyfx|DTEN3|EUR/AUD"
         },
         {
-            "A-position": "RebelsFunding|22026429632526|USD/CAD",
-            "match-B-position": "tastyfx|DTEN3|USD/CAD"
+            "A-position": "RebelsFunding|22026429632526|GBP/USD",
+            "match-B-position": "tastyfx|DTEN3|GBP/USD"
         },
         {
             "A-position": "RebelsFunding|22026429641325|EUR/USD",
@@ -79,7 +73,19 @@
         {
             "A-position": "RebelsFunding|RF-325-46378|GBP/CAD",
             "match-B-position": "tastyfx|DTEN3|GBP/CAD"
+        },
+        {
+            "A-position": "RebelsFunding|RF-880-46585|EUR/USD",
+            "match-B-position": "tastyfx|DTEN3|EUR/USD"
+        },
+        {
+            "A-position": "FTMO|650007509|NZD/USD",
+            "match-B-position": "tastyfx|DTEN3|NZD/USD"
         }
+    ],
+    "hidden-accounts": [
+        "AlphaCapital|5103701",
+        "FTMO|n/a"
     ],
     "schedule-interval": "60m"
 }

@@ -510,13 +510,13 @@ async function runFullScan() {
           Opening: p.opening || 'n/a',
           // No separate "current price" column in this grid, only Entry.
           Latest: 'n/a',
-          StopLoss: p.stopLoss || 'none',
-          TakeProfit: p.takeProfit || 'none',
+          StopLossPrice: p.stopLoss || 'none',
+          TakeProfitPrice: p.takeProfit || 'none',
           PositionPL: p.netUsd,
         }))
       : [{
           ...base, PosID: 'n/a', Symbol: 'n/a', Direction: 'n/a', Size: 'n/a', SizeUnit: 'n/a',
-          Opening: 'n/a', Latest: 'n/a', StopLoss: 'none', TakeProfit: 'none', PositionPL: '',
+          Opening: 'n/a', Latest: 'n/a', StopLossPrice: 'none', TakeProfitPrice: 'none', PositionPL: '',
         }];
 
     let writeError = null;

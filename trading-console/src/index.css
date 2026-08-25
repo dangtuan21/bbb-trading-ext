@@ -4,3 +4,21 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* DataTable's warning-highlight cells (any column with a triggered
+   highlightIf -- Daily/Max Drawdown, Target PL, PL %, TP/SL, etc.) blink
+   between amber-200 and amber-400 instead of sitting on a static amber-200
+   fill, so a threshold crossing is hard to miss at a glance. */
+@keyframes warn-blink {
+  0%,
+  100% {
+    background-color: #fde68a; /* amber-200 */
+  }
+  50% {
+    background-color: #fbbf24; /* amber-400 */
+  }
+}
+
+.animate-warn-blink {
+  animation: warn-blink 1s ease-in-out infinite;
+}

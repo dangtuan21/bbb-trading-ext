@@ -31,7 +31,9 @@ import configData from "../data-fact/config.json"
  * rule for the same account (see computeMainView's ruleMap vs
  * ruleMapByAccount). aSymbol is null for a blanket rule.
  *
- * "schedule-interval" isn't consumed here.
+ * "schedule-interval" isn't consumed here. Neither is "hidden-accounts" --
+ * a sibling top-level key controlling which accounts are excluded from
+ * MainView entirely, unrelated to rules; see lib/hiddenAccounts.js.
  */
 export function parseMatchRules(json) {
   const rules = []

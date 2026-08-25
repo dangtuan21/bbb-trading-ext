@@ -41,9 +41,10 @@ function sideOf(key) {
  *
  * `columnBg` (optional) tints every body cell in the column with a constant
  * background, all the time -- not conditional like highlightIf. When both
- * are set on the same column, a highlightIf-triggered cell uses a stronger
- * shade (bg-amber-200) instead of the baseline columnBg tint, so the
- * warning state still stands out above the column's own resting color.
+ * are set on the same column, a highlightIf-triggered cell blinks (amber
+ * animate-warn-blink, see index.css) instead of sitting on the baseline
+ * columnBg tint, so the warning state still stands out above the column's
+ * own resting color.
  *
  * `link` (optional) renders that column's cell content as a clickable link
  * instead of plain text -- clicking it calls `onRowClick(row)`, same
@@ -56,8 +57,16 @@ function sideOf(key) {
  * nearest whole number and appends "%" (e.g. 94.27 -> "94%"), for ratio
  * columns like MainView's "A Equity %". Independent of `money`/`numeric`;
  * a pct column should still set `numeric: true` for right-alignment.
+ *
+ * `rowBg(row)` (optional prop, not a column option) -- like `highlightIf`
+ * but for the WHOLE row rather than one column: when it returns a
+ * truthy Tailwind class, every cell in that row uses it instead of that
+ * column's own `columnBg`/`highlightIf` state (e.g. MainView dims a
+ * no-open-position row -- A_Symbol is "n/a" -- to a flat light gray so its
+ * stale account-level numbers don't compete visually with rows that have
+ * real positions open). Text switches to black whenever this fires.
  */
-export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick }) {
+export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick, rowBg }) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">
@@ -97,20 +106,24 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">
-          {rows.map((row, i) => (
+          {rows.map((row, i) => {
+            const rowBackground = rowBg && rowBg(row)
+            return (
             <tr key={i} className="hover:bg-slate-50">
               {cols.map((col) => {
                 const raw = row[col.key]
                 const isNegative = col.money && parseFloat(raw) < 0
                 const isHighlighted = col.highlightIf && col.highlightIf(row)
-                const cellBg = isHighlighted ? "bg-amber-200" : col.columnBg ?? ""
+                const cellBg = rowBackground || (isHighlighted ? "animate-warn-blink" : col.columnBg ?? "")
                 const content = col.money ? formatMoney(raw) : col.pct ? formatPct(raw) : raw
                 return (
                   <td
                     key={col.key}
                     className={`whitespace-nowrap px-3 py-2 ${
                       col.numeric ? "text-right tabular-nums" : "text-left"
-                    } ${cellBg} ${isNegative ? "text-red-600" : "text-slate-700"}`}
+                    } ${cellBg} ${
+                      rowBackground ? "text-black" : isNegative ? "text-red-600" : "text-slate-700"
+                    }`}
                   >
                     {col.link && onRowClick ? (
                       <button
@@ -127,7 +140,8 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                 )
               })}
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>
