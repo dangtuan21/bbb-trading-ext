@@ -69,31 +69,57 @@ function parseMaxLoss(lines) {
   return '';
 }
 
-// "Max Daily Loss: -$500" (the Objectives table's own row, same "label:
-// value" link pattern as "Max Loss:" above) paired with that SAME row's
-// "Result" column value, which renders as the line right after the label
-// in document order (e.g. "-$11.50 (-0.1%)") -- confirmed live via a real
-// screenshot of the Objectives table (Trading Objectives | Result |
-// Summary columns). Maps to the same MaxDailyDrawdown/TodayDrawdown
-// columns ("Max Daily DD"/"Cur Daily DD" in MainView) RebelsFunding's own
-// Contest stats tab already feeds -- both stored as positive dollar
-// magnitudes for consistency with that convention, even though this page
-// renders both as negative ("-$500", "-$11.50"). Only the dollar figure is
-// kept from the Result cell; the "(-0.1%)" alongside it is FTMO's own %
-// (a different denominator than MainView's ratio-based warning, same
-// caveat as RebelsFunding's scraped Max Daily Drawdown %/Today's Drawdown
-// %) and isn't captured here.
-function parseMaxDailyLoss(lines) {
+// MaxDailyDrawdown/TodayDrawdown ("Max Daily DD"/"Cur Daily DD" in MainView)
+// read straight off the "Your stats" strip near the bottom of the page --
+// NOT the Objectives table's "Max Daily Loss: -$500"/Result pair above,
+// which is a DIFFERENT number (confirmed live via a real screenshot: the
+// strip showed "Today's permitted loss" $462.18 while the Objectives
+// Result column showed -$261.82 for the same account at the same moment --
+// FTMO computes those two views differently, so picking the wrong one isn't
+// a rounding difference, it's the wrong figure entirely). Per explicit
+// instruction, this reads:
+//   Today's permitted loss -> MaxDailyDrawdown
+//   Today's profit         -> TodayDrawdown
+// straight off the strip, no formula -- moneyMagnitude() below only strips
+// "$"/","/sign the same way parseMaxLoss already does above, it doesn't
+// derive anything.
+const STATS_STRIP_LABELS = {
+  todaysPermittedLoss: "Today's permitted loss",
+  todaysProfit: "Today's profit",
+};
+
+// Extracts just the digit/decimal portion, dropping any "-" sign -- same
+// positive-magnitude convention parseMaxLoss above already uses (this page
+// renders "Today's profit" signed, e.g. "-$37.82" on a losing day, but
+// MaxDailyDrawdown/TodayDrawdown are stored as magnitudes throughout this
+// file/MainView).
+function moneyMagnitude(raw) {
+  const m = /-?\$?\s*([\d,]+(?:\.\d+)?)/.exec(raw || '');
+  return m ? m[1].replace(/,/g, '') : '';
+}
+
+// Finds a line containing `label` (substring, not exact match -- the label
+// cell likely has an info-icon glued on nearby, same lesson as
+// ext-tastyfx's "SIZE ⌃" header-matching bug: exact string equality broke
+// there on decorated text), then scans forward a few lines for the first
+// one shaped like a dollar amount -- the value sits a couple of DOM nodes
+// below the label (there's an icon button element in between), not
+// necessarily on the very next line.
+function valueNearLabel(lines, label) {
   for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].startsWith('Max Daily Loss:')) continue;
-    const limitMatch = /-?\$?\s*([\d,]+(?:\.\d+)?)/.exec(lines[i].slice('Max Daily Loss:'.length));
-    const maxDailyDrawdown = limitMatch ? limitMatch[1].replace(/,/g, '') : '';
-    const resultLine = lines[i + 1] || '';
-    const resultMatch = /^-?\$?\s*([\d,]+(?:\.\d+)?)/.exec(resultLine);
-    const todayDrawdown = resultMatch ? resultMatch[1].replace(/,/g, '') : '';
-    return { maxDailyDrawdown, todayDrawdown };
+    if (!lines[i].includes(label)) continue;
+    for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+      if (MONEY_RE.test(lines[j])) return lines[j];
+    }
   }
-  return { maxDailyDrawdown: '', todayDrawdown: '' };
+  return '';
+}
+
+function parseStatsStrip(lines) {
+  return {
+    todaysPermittedLoss: valueNearLabel(lines, STATS_STRIP_LABELS.todaysPermittedLoss),
+    todaysProfit: valueNearLabel(lines, STATS_STRIP_LABELS.todaysProfit),
+  };
 }
 
 // "AUDUSD.sim" -> "AUD/USD". Already-slashed or unrecognized formats pass
@@ -123,7 +149,9 @@ function parseAccountSummary(lines) {
   // LABEL_VARIANTS.pl) -- no Equity-Balance fallback if none of those
   // labels are found; left blank rather than derived.
   const accountPL = money(valueAfterAny(lines, LABEL_VARIANTS.pl));
-  const { maxDailyDrawdown, todayDrawdown } = parseMaxDailyLoss(lines);
+  const { todaysPermittedLoss, todaysProfit } = parseStatsStrip(lines);
+  const maxDailyDrawdown = moneyMagnitude(todaysPermittedLoss);
+  const todayDrawdown = moneyMagnitude(todaysProfit);
   const maxDailyDrawdownPct = pctOf(maxDailyDrawdown, balance);
   const todayDrawdownPct = pctOf(todayDrawdown, balance);
   const maxDrawdownAmount = parseMaxLoss(lines);
@@ -270,12 +298,12 @@ async function captureFtmoRows() {
     ? { reason: 'balance-not-found', scrolled, hasBalanceText: document.body.innerText.includes('Balance'), hasOpenTradesText: document.body.innerText.includes('Open trades'), url: location.href }
     : null;
 
-  // Debug aid: "Max Daily Loss:"/"Max Loss:" are confirmed live (via a real
-  // screenshot of the Objectives table) -- if either stops matching (a
-  // wording change, etc.), surface every line that plausibly relates so the
-  // real label/layout can be read off directly instead of guessed blind,
-  // same approach that nailed down RebelsFunding's real "Today's Drawdown"
-  // label.
+  // Debug aid: "Today's permitted loss"/"Today's profit"/"Max Loss:" are
+  // confirmed live (via a real screenshot of the "Your stats" strip and the
+  // Objectives table) -- if any stops matching (a wording change, etc.),
+  // surface every line that plausibly relates so the real label/layout can
+  // be read off directly instead of guessed blind, same approach that
+  // nailed down RebelsFunding's real "Today's Drawdown" label.
   const drawdownDiag = !summary.maxDailyDrawdown || !summary.todayDrawdown || !summary.maxDrawdownAmount
     ? { reason: 'drawdown-labels-not-found', nearbyLines: lines.filter((l) => /permitted|profit|loss/i.test(l)) }
     : null;
