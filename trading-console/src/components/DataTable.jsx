@@ -81,7 +81,7 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
     const merged = typeof col === "string" ? base : { ...base, ...col }
     // `numeric` defaults off the FINAL money value (after any override),
     // not the base one -- a column explicitly marked money: true (e.g.
-    // MainView's prefixed "A_PositionPL", which isn't itself a key in
+    // MainView's prefixed "A_AccountPL", which isn't itself a key in
     // MONEY_FIELDS) must still end up right-aligned even without also
     // repeating numeric: true by hand.
     const numeric = merged.numeric ?? (merged.money || NUMERIC_FIELDS.has(key))

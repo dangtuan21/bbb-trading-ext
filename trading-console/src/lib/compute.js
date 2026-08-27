@@ -129,7 +129,6 @@ export function computeMainView(
         symbols: new Set(),
         directions: new Set(),
         totalSize: 0,
-        positionPL: 0,
         hasTakeProfit: false,
         hasStopLoss: false,
         stopLossRisk: 0,
@@ -141,8 +140,6 @@ export function computeMainView(
     if (row.Direction && row.Direction !== "n/a") g.directions.add(row.Direction)
     const size = toNumber(row.Size)
     if (size !== null) g.totalSize += size
-    const pl = toNumber(row.PositionPL)
-    if (pl !== null) g.positionPL += pl
     // "none" is every platform's sentinel for "not set" (see
     // ext-rebelsfunding/ext-ftmo/ext-alphacapital's background.js) --
     // anything else is a real price. An account with multiple open
@@ -186,7 +183,6 @@ export function computeMainView(
     Symbol: g.symbols.size ? [...g.symbols].join(", ") : "n/a",
     Direction: g.directions.size ? [...g.directions].join(", ") : "n/a",
     TotalSize: round2(g.totalSize),
-    PositionPL: round2(g.positionPL),
     hasTakeProfit: g.hasTakeProfit,
     hasStopLoss: g.hasStopLoss,
     stopLossRisk: g.stopLossRisk,
@@ -404,7 +400,6 @@ export function computeMainView(
       // configured % -- a direct value-vs-threshold check (A_PLPct is
       // already a percentage), unlike the ratio-of-two-amounts checks above.
       A_PLPctWarning: hasOpenPosition && isPctWarning(plPct, warningTargetProfitPct),
-      A_PositionPL: l.PositionPL,
       Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
       B_AccountID: r ? r.AccountID : "",

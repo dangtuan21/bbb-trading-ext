@@ -161,6 +161,21 @@ function parseAccountSummary(lines) {
   };
 }
 
+// Matches an order-ID line in EITHER of two shapes FTMO's own "Open trades"
+// section renders, depending on viewport width: the wide table view (a bare
+// digit line, e.g. "30777770" -- what ORDER_ID_RE alone was written for and
+// still matches directly), or the narrow "card" view (a heading combining
+// the label and the ID on one line, e.g. "Ticket 30777770" -- confirmed via
+// a real screenshot showing PosID/Symbol/Direction/Size all coming back
+// "n/a" despite a real open trade being visible, because the bare-digit
+// check alone never matches a line with "Ticket " glued onto the front of
+// it, so orderId stayed '' and the whole row got dropped).
+function extractOrderId(line) {
+  if (ORDER_ID_RE.test(line)) return line;
+  const m = /^Ticket\s+(\d{5,})$/i.exec(line);
+  return m ? m[1] : null;
+}
+
 // Anchors on each Symbol match and searches a small window of nearby lines
 // for the other columns: an order ID before it, a Buy/Sell direction before
 // it, a bare number (Volume) right before it, a money value (PnL) after it.
@@ -187,8 +202,9 @@ function parseOpenTrades(lines) {
 
     let orderId = '';
     for (let j = before.length - 1; j >= 0; j--) {
-      if (ORDER_ID_RE.test(before[j])) {
-        orderId = before[j];
+      const id = extractOrderId(before[j]);
+      if (id) {
+        orderId = id;
         break;
       }
     }
