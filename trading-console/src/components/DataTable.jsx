@@ -58,6 +58,14 @@ function sideOf(key) {
  * columns like MainView's "A Equity %". Independent of `money`/`numeric`;
  * a pct column should still set `numeric: true` for right-alignment.
  *
+ * `format(value)` (optional) -- a display-only transform applied to the
+ * raw cell value (e.g. MainView's "A Platform" showing "RF" instead of
+ * "RebelsFunding"). Only changes what's RENDERED; `row[col.key]` itself is
+ * untouched, so matching/filtering logic elsewhere (A_SIDE_PLATFORMS,
+ * matchRules, hiddenAccounts, the raw CSV) keeps working off the real
+ * value. Takes precedence over money/pct when set, since a column needing
+ * a custom display transform is never also a $ or % one.
+ *
  * `rowBg(row)` (optional prop, not a column option) -- like `highlightIf`
  * but for the WHOLE row rather than one column: when it returns a
  * truthy Tailwind class, every cell in that row uses it instead of that
@@ -96,7 +104,14 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
             {cols.map((col) => (
               <th
                 key={col.key}
-                className={`whitespace-nowrap px-3 py-2 text-xs font-semibold tracking-wide ${
+                // A label containing "\n" (e.g. MainView's "Max Daily
+                // DD"/"Cur Daily DD %" headers, split onto two lines to
+                // keep those columns narrower) wraps at that literal break
+                // via whitespace-pre-line instead of the default
+                // whitespace-nowrap -- every other column's label has no
+                // "\n" in it, so this only changes behavior for the ones
+                // that opt in.
+                className={`${col.label.includes("\n") ? "whitespace-pre-line" : "whitespace-nowrap"} px-3 py-2 text-xs font-semibold tracking-wide ${
                   col.numeric ? "text-right" : "text-left"
                 } ${col.headerBg ?? SIDE_HEADER_BG[sideOf(col.key)] ?? ""}`}
               >
@@ -130,7 +145,7 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                 const isNegative = col.money && parseFloat(raw) < 0
                 const isHighlighted = col.highlightIf && col.highlightIf(row)
                 const cellBg = rowBackground || (isHighlighted ? "animate-warn-blink" : col.columnBg ?? "")
-                const content = col.money ? formatMoney(raw) : col.pct ? formatPct(raw) : raw
+                const content = col.format ? col.format(raw) : col.money ? formatMoney(raw) : col.pct ? formatPct(raw) : raw
                 return (
                   <td
                     key={col.key}
