@@ -7,7 +7,7 @@ import {
   useWarningTPSLEnabled,
 } from "../lib/settings"
 
-const SERVER_URL = "http://127.0.0.1:8765"
+const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
 
 function ThresholdField({ id, label, value, onChange }) {
   const [text, setText] = useState(String(value))

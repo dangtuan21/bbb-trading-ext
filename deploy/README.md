@@ -1,0 +1,67 @@
+# Deploying bbb-trading-ext
+
+Target: DigitalOcean droplet, Ubuntu 24.04, 1GB RAM, trading.moreleadnow.com.
+
+## 1. Server prep (one time)
+```
+adduser deploy && usermod -aG sudo deploy
+mkdir -p /var/log/bbb-trading-ext && chown deploy:deploy /var/log/bbb-trading-ext
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+apt-get install -y nodejs
+apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+apt-get update && apt-get install -y caddy
+```
+
+## 2. Get the code
+```
+su - deploy
+git clone git@github.com:<you>/bbb-trading-ext.git /opt/bbb-trading-ext   # or https:// URL
+```
+
+## 3. Secrets (copied by hand, never via git)
+From your Mac:
+```
+scp ext-server/.env deploy@<droplet-ip>:/opt/bbb-trading-ext/ext-server/.env
+scp market-server/.env deploy@<droplet-ip>:/opt/bbb-trading-ext/market-server/.env
+```
+
+## 4. Build the dashboard
+```
+cd /opt/bbb-trading-ext/trading-console
+npm install
+npm run build
+```
+
+## 5. Install services
+```
+sudo cp /opt/bbb-trading-ext/deploy/ext-server.service /etc/systemd/system/
+sudo cp /opt/bbb-trading-ext/deploy/market-server.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ext-server market-server
+```
+
+## 6. Caddy (reverse proxy + HTTPS + Basic Auth)
+```
+caddy hash-password   # paste result into deploy/Caddyfile's REPLACE_WITH_BCRYPT_HASH
+sudo cp /opt/bbb-trading-ext/deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+Caddy auto-provisions the Let's Encrypt cert on first request once DNS for
+trading.moreleadnow.com points at this droplet's IP.
+
+## 7. Verify
+```
+systemctl status ext-server market-server caddy
+curl -u tuan:<password> https://trading.moreleadnow.com/api/ext/status
+```
+
+## Redeploying after code changes
+```
+cd /opt/bbb-trading-ext && git pull
+cd trading-console && npm run build
+sudo systemctl restart ext-server market-server
+sudo systemctl reload caddy
+```

@@ -1,0 +1,16 @@
+[Unit]
+Description=bbb-trading-ext positions tracker (ext-server)
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/opt/bbb-trading-ext/ext-server
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/bbb-trading-ext/ext-server.log
+StandardError=append:/var/log/bbb-trading-ext/ext-server.log
+
+[Install]
+WantedBy=multi-user.target

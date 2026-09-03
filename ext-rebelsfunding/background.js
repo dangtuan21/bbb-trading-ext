@@ -13,7 +13,11 @@
 
 const REBELSFUNDING_URL = 'https://rf-zone.rebelsfunding.com/';
 // Shared with the tastyfx extension -- see ext-server/server.js.
-const SERVER_URL = 'http://127.0.0.1:8765';
+const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+// Fill in after generating the Caddy Basic Auth password on the server
+// (see deploy/README.md, step 6) -- keep this repo private, this is the
+// only thing standing between the internet and your account balances.
+const SERVER_AUTH = 'Basic ' + btoa('tuan:REPLACE_WITH_PASSWORD');
 const SCAN_WINDOW = { width: 2400, height: 1200 };
 const TAB_LOAD_TIMEOUT_MS = 20000;
 const RF_TRADER_TAB_TIMEOUT_MS = 10000;
@@ -1061,7 +1065,7 @@ async function runFullScan() {
     try {
       const res = await fetch(`${SERVER_URL}/write`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': SERVER_AUTH },
         body: JSON.stringify({ platform: 'rebelsfunding', rows }),
       });
       const result = await res.json();

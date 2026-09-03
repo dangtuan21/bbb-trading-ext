@@ -1,7 +1,11 @@
 // Service worker: relays captured rows from content.js to the shared local
 // server (ext-server/server.js, also used by tastyfx and RebelsFunding).
 
-const SERVER_URL = 'http://127.0.0.1:8765';
+const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+// Fill in after generating the Caddy Basic Auth password on the server
+// (see deploy/README.md, step 6) -- keep this repo private, this is the
+// only thing standing between the internet and your account balances.
+const SERVER_AUTH = 'Basic ' + btoa('tuan:REPLACE_WITH_PASSWORD');
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'FTMO_ROWS') {
@@ -14,7 +18,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       try {
         const res = await fetch(`${SERVER_URL}/write`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': SERVER_AUTH },
           body: JSON.stringify({ platform: 'ftmo', rows: message.rows }),
         });
         const result = await res.json();

@@ -4,7 +4,11 @@
 // fetch() from the service worker works with no user gesture and no tab
 // needing to stay open, unlike the File System Access API.
 
-const SERVER_URL = 'http://127.0.0.1:8765';
+const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+// Fill in after generating the Caddy Basic Auth password on the server
+// (see deploy/README.md, step 6) -- keep this repo private, this is the
+// only thing standing between the internet and your account balances.
+const SERVER_AUTH = 'Basic ' + btoa('tuan:REPLACE_WITH_PASSWORD');
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'SNAPSHOT') {
@@ -16,7 +20,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const accountLabel = message.snapshot.identity?.accountLabel || 'n/a';
         const res = await fetch(`${SERVER_URL}/write`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': SERVER_AUTH },
           body: JSON.stringify({ platform: 'tastyfx', snapshot: message.snapshot, accountId, accountLabel })
         });
         const result = await res.json();

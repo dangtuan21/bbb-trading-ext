@@ -6,7 +6,7 @@
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://trader.ftmo.oanda.com/*",
-    "http://127.0.0.1:8765/*"
+    "https://trading.moreleadnow.com/*"
   ],
   "background": {
     "service_worker": "background.js"

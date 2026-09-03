@@ -18,7 +18,7 @@ const MARKET_POSITIONS_URL = `${import.meta.env.BASE_URL}data/market-positions.c
 // Distinct from ext-server's 8765 (RuleEditForm.jsx/SettingsPage.jsx's
 // SERVER_URL) and trading-console's own dev-server 5173 -- see market-
 // server/server.js's PORT.
-const MARKET_SERVER_URL = "http://127.0.0.1:8766"
+const MARKET_SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8766" : "/api/market"
 
 function cleanRow(row) {
   const out = {}

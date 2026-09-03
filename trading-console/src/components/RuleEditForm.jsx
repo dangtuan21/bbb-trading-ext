@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useAccountView } from "../lib/useAccountView"
 
-const SERVER_URL = "http://127.0.0.1:8765"
+const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
 
 /**
  * MainView's rule editor (the "edit position" modal). Opened by clicking an

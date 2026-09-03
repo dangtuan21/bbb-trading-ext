@@ -1,0 +1,30 @@
+# Caddyfile for bbb-trading-ext
+#
+# Serves the trading-console production build as static files and reverse
+# proxies the two Node backends under /api/ext and /api/market. Everything
+# on this domain is gated by HTTP Basic Auth (real account balances/
+# positions live behind this) -- generate the password hash with:
+#
+#   caddy hash-password
+#
+# and paste the result below in place of REPLACE_WITH_BCRYPT_HASH.
+#
+# Install: sudo cp Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+
+trading.moreleadnow.com {
+	basic_auth {
+		tuan REPLACE_WITH_BCRYPT_HASH
+	}
+
+	handle_path /api/ext/* {
+		reverse_proxy 127.0.0.1:8765
+	}
+
+	handle_path /api/market/* {
+		reverse_proxy 127.0.0.1:8766
+	}
+
+	root * /opt/bbb-trading-ext/trading-console/dist
+	file_server
+	encode gzip
+}

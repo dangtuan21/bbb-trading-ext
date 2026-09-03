@@ -1,4 +1,8 @@
-const SERVER_URL = 'http://127.0.0.1:8765';
+const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+// Fill in after generating the Caddy Basic Auth password on the server
+// (see deploy/README.md, step 6) -- keep this repo private, this is the
+// only thing standing between the internet and your account balances.
+const SERVER_AUTH = 'Basic ' + btoa('tuan:REPLACE_WITH_PASSWORD');
 
 const statusBox = document.getElementById('statusBox');
 const lastWriteEl = document.getElementById('lastWrite');
@@ -29,7 +33,7 @@ async function refreshStatus() {
   }
 
   try {
-    const res = await fetch(`${SERVER_URL}/status`);
+    const res = await fetch(`${SERVER_URL}/status`, { headers: { 'Authorization': SERVER_AUTH } });
     const status = await res.json();
     statusBox.className = 'status ok';
     statusBox.textContent = `Server running -- last write ${fmtTime(status.ftmo?.lastWriteTime)}`;

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Watches the TastyFX (deal.ig.com) Positions table and appends periodic snapshots to a local JSON history file.",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://deal.ig.com/*", "http://127.0.0.1:8765/*"],
+  "host_permissions": ["https://deal.ig.com/*", "https://trading.moreleadnow.com/*"],
   "background": {
     "service_worker": "background.js"
   },

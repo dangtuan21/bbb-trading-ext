@@ -19,7 +19,11 @@
 // without stealing the user's actual foreground focus.
 
 const ALPHACAPITAL_URL = 'https://app.acg-markets.com/?u=dangtuan21';
-const SERVER_URL = 'http://127.0.0.1:8765';
+const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+// Fill in after generating the Caddy Basic Auth password on the server
+// (see deploy/README.md, step 6) -- keep this repo private, this is the
+// only thing standing between the internet and your account balances.
+const SERVER_AUTH = 'Basic ' + btoa('tuan:REPLACE_WITH_PASSWORD');
 // Tall viewport so the Positions panel has real vertical space to render
 // into -- confirmed by the Python author that ~860px tall leaves the panel
 // open but its row area at ~0 height.
@@ -523,7 +527,7 @@ async function runFullScan() {
     try {
       const res = await fetch(`${SERVER_URL}/write`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': SERVER_AUTH },
         body: JSON.stringify({ platform: 'alphacapital', rows }),
       });
       const result = await res.json();

@@ -7,7 +7,7 @@
   "host_permissions": [
     "https://rf-zone.rebelsfunding.com/*",
     "https://*.rf-trader.com/*",
-    "http://127.0.0.1:8765/*"
+    "https://trading.moreleadnow.com/*"
   ],
   "background": {
     "service_worker": "background.js"
