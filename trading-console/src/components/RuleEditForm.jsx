@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { useAccountView } from "../lib/useAccountView"
 
 const SERVER_URL = "http://127.0.0.1:8765"
 
@@ -27,8 +28,32 @@ const SERVER_URL = "http://127.0.0.1:8765"
  * rule shape at all (dropped from MainView, compute.js, matchRules.js, and
  * server.js's applyRuleEdit) -- config.json's rules no longer carry a
  * "Stoploss-Takeprofit" field.
+ *
+ * `bOptions` (the B-position dropdown's choices) isn't passed in -- this
+ * form computes it itself via useAccountView(), the same shared hook
+ * AccountViewPage/AccountChartsPage use, rather than App.jsx fetching/
+ * computing mainView once and threading bOptions down as a prop. Costs one
+ * extra (cheap, one-time) positions.csv re-fetch while the modal is open;
+ * buys a modal that owns its own data instead of depending on whichever
+ * page happened to open it.
  */
-export default function RuleEditForm({ row, bOptions, onClose, onSaved }) {
+export default function RuleEditForm({ row, onClose, onSaved }) {
+  const { mainView } = useAccountView()
+  // Every currently-known non-A-side Platform+AccountID+Symbol, deduped (an
+  // account can carry multiple open positions, i.e. multiple AccountLog
+  // rows sharing an AccountID with different Symbols).
+  const bOptions = useMemo(() => {
+    const seen = new Set()
+    const options = []
+    for (const r of mainView.right) {
+      const key = `${r.Platform}|${r.AccountID}|${r.Symbol}`
+      if (seen.has(key) || r.Symbol === "n/a") continue
+      seen.add(key)
+      options.push({ platform: r.Platform, accountId: r.AccountID, symbol: r.Symbol })
+    }
+    return options
+  }, [mainView.right])
+
   const hasExistingRule = row._rule !== null
   const originalASymbol = hasExistingRule ? row._rule.aSymbol : null
 

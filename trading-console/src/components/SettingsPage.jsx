@@ -1,4 +1,11 @@
 import { useState } from "react"
+import { hiddenAccounts } from "../lib/hiddenAccounts"
+import {
+  useWarningDailyDrawdownThreshold,
+  useWarningDrawdownThreshold,
+  useWarningTargetProfitThreshold,
+  useWarningTPSLEnabled,
+} from "../lib/settings"
 
 const SERVER_URL = "http://127.0.0.1:8765"
 
@@ -126,48 +133,58 @@ function HiddenAccountsSection({ hiddenAccounts }) {
   )
 }
 
-export default function SettingsPage({
-  warningDailyDrawdownPct,
-  onWarningDailyDrawdownChange,
-  warningDrawdownPct,
-  onWarningDrawdownChange,
-  warningTargetProfitPct,
-  onWarningTargetProfitChange,
-  warningTPSLEnabled,
-  onWarningTPSLChange,
-  hiddenAccounts,
-}) {
+// Settings has no CSV fetch of its own (nothing to be "loading" or
+// "error" here, unlike every other tab -- see those pages' own PageHeader
+// usage), so it renders a plain title rather than pulling in PageHeader's
+// status-driven loading/error/row-count machinery for a page that never
+// uses any of it.
+//
+// Reads/writes all four warning settings and hiddenAccounts itself, via the
+// same hooks/import AccountViewPage/AccountChartsPage/MarketViewPage read
+// from (useMainViewFor/useMainViewColumns) -- takes no props at all, rather
+// than App.jsx owning this state and threading value/onChange pairs down.
+// Since Settings is never mounted at the same time as any tab that reads
+// these (only one tab renders at a time), a change made here is simply
+// picked up fresh the next time a data page mounts and calls its own copy
+// of the same hook -- no cross-instance sync needed.
+export default function SettingsPage() {
+  const [warningDailyDrawdownPct, setWarningDailyDrawdownPct] = useWarningDailyDrawdownThreshold()
+  const [warningDrawdownPct, setWarningDrawdownPct] = useWarningDrawdownThreshold()
+  const [warningTargetProfitPct, setWarningTargetProfitPct] = useWarningTargetProfitThreshold()
+  const [warningTPSLEnabled, setWarningTPSLEnabled] = useWarningTPSLEnabled()
+
   return (
     <div className="flex flex-col gap-4">
+      <h2 className="text-xl font-semibold text-slate-800">Settings</h2>
       <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4">
           <ThresholdField
             id="warning-daily-drawdown-pct"
             label="Warning Daily Drawdown %"
             value={warningDailyDrawdownPct}
-            onChange={onWarningDailyDrawdownChange}
+            onChange={setWarningDailyDrawdownPct}
           />
           <ThresholdField
             id="warning-drawdown-pct"
             label="Warning Drawdown %"
             value={warningDrawdownPct}
-            onChange={onWarningDrawdownChange}
+            onChange={setWarningDrawdownPct}
           />
           <ThresholdField
             id="warning-target-profit-pct"
             label="Warning Target Profit %"
             value={warningTargetProfitPct}
-            onChange={onWarningTargetProfitChange}
+            onChange={setWarningTargetProfitPct}
           />
           <ToggleField
             id="warning-tpsl-enabled"
             label="Warning TP/SL"
             value={warningTPSLEnabled}
-            onChange={onWarningTPSLChange}
+            onChange={setWarningTPSLEnabled}
           />
         </div>
       </div>
-      <HiddenAccountsSection hiddenAccounts={hiddenAccounts ?? []} />
+      <HiddenAccountsSection hiddenAccounts={hiddenAccounts} />
     </div>
   )
 }

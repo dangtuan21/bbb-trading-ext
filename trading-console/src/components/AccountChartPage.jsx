@@ -1,13 +1,13 @@
 import { formatPct } from "../lib/compute"
 
 /**
- * Chart: one horizontal bar per Account View row that currently has an open
- * position, showing that account's chart %, read off `row[pctKey]` (App.jsx
- * passes rows already filtered to A_Symbol !== "n/a" and a numeric
- * `row[pctKey]` -- see chartRows/dailyDdChartRows in App.jsx). `pctKey`
- * defaults to "A_PLPct" (the "Full Chart" section); passing
+ * AccountChartPage: one horizontal bar per Account View row that currently
+ * has an open position, showing that account's chart %, read off
+ * `row[pctKey]` (App.jsx passes rows already filtered to A_Symbol !== "n/a"
+ * and a numeric `row[pctKey]` -- see chartRows/dailyDdChartRows in App.jsx).
+ * `pctKey` defaults to "A_PLPct" (the "Full Chart" section); passing
  * "A_TodayDrawdownPct" instead reuses this exact same component for the
- * "Daily DD Chart" section stacked right below it on the same "chart" nav
+ * "Daily DD Chart" section stacked right above it on the same "chart" nav
  * page (see the "chart" render branch in App.jsx), plotting "Cur Daily DD %"
  * per row instead -- everything below (scale, clipping, layout, ordering)
  * works identically no matter which field is plotted, since it's all keyed
@@ -52,7 +52,7 @@ import { formatPct } from "../lib/compute"
  * read off the two ends of the chart nearest the green/red boundary, not
  * one single top-to-bottom ranking across both colors.
  */
-export default function ChartPage({ rows, pctKey = "A_PLPct" }) {
+export default function AccountChartPage({ rows, pctKey = "A_PLPct" }) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">

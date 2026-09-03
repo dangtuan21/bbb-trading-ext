@@ -34,6 +34,23 @@ export const POSITIONLOG_FIELDS = [
   "PositionPL",
 ]
 
+// AccountLog's own column list -- one row per open position (see
+// computeAccountLog in compute.js), so these are plain unprefixed field
+// names same as PositionLog's POSITIONLOG_FIELDS above, just a narrower
+// subset of them (no per-platform scrape-only fields like MaxDailyDrawdown).
+export const ACCOUNTLOG_COLUMNS = [
+  "Platform",
+  "AccountID",
+  "AccountLabel",
+  "Balance",
+  "Equity",
+  "AccountPL",
+  "Symbol",
+  "Direction",
+  "TotalSize",
+  "SymbolPL",
+]
+
 export const MONEY_FIELDS = new Set([
   "Balance",
   "Equity",
