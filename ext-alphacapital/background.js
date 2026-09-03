@@ -23,7 +23,7 @@ const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
 // Fill in after generating the Caddy Basic Auth password on the server
 // (see deploy/README.md, step 6) -- keep this repo private, this is the
 // only thing standing between the internet and your account balances.
-const SERVER_AUTH = 'Basic ' + btoa('tuan:REPLACE_WITH_PASSWORD');
+const SERVER_AUTH = 'Basic ' + btoa('tuan:ngvM4rSEHBYZTXkS5R9b');
 // Tall viewport so the Positions panel has real vertical space to render
 // into -- confirmed by the Python author that ~860px tall leaves the panel
 // open but its row area at ~0 height.

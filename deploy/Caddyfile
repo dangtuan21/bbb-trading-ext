@@ -13,7 +13,7 @@
 
 trading.moreleadnow.com {
 	basic_auth {
-		tuan REPLACE_WITH_BCRYPT_HASH
+		tuan $2b$10$3fvT0efVeKA953PBj9GcY.3qeChyB2IkoXmlx7VekSgzl/iPWnoKy
 	}
 
 	handle_path /api/ext/* {
