@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar"
 import DataTable from "./components/DataTable"
 import RuleEditForm from "./components/RuleEditForm"
 import SettingsPage from "./components/SettingsPage"
+import ChartPage from "./components/ChartPage"
 import { usePositionLog } from "./lib/usePositionLog"
 import { useMarketPositions } from "./lib/useMarketPositions"
 import { useRelativeTime } from "./lib/relativeTime"
@@ -56,12 +57,16 @@ const ACCOUNTLOG_COLUMNS = [
 // computed in computeMainView. Placed next to A_Equity (its "current"
 // counterpart) the same way A_ProfitTarget sits next to A_AccountPL, with
 // its own violet background; no highlightIf on either.
-// A_PLPct ("A PL %") = (A_Equity - A_InitialBalance) / A_ProfitTarget
-// ("A Target PL") as a percentage -- how much of the profit target has been
-// realized so far. Shown right after A_Equity, but plain (no background
-// styling of its own) -- just its warning flag (A_PLPctWarning, fired once
-// A_PLPct itself reaches Warning Target Profit %), same amber highlight as
-// every other warning column when triggered.
+// A_PLPct ("A PL %") -- computed in computeMainView, same numerator either
+// way (A_Equity - A_InitialBalance), just a different denominator: divided
+// by A_ProfitTarget while Equity is at or above InitialBalance (how much of
+// the profit target has been realized), or by A_InitialBalance itself once
+// Equity has dropped below it (the shortfall as a % of starting size) --
+// see the comment on plPct in compute.js for why.
+// Shown right after A_Equity, but plain (no background styling of its own)
+// -- just its warning flag (A_PLPctWarning, fired once A_PLPct itself
+// reaches Warning Target Profit %), same amber highlight as every other
+// warning column when triggered.
 //
 // A_TPSL's highlightIf (A_TPSLWarning, computed in compute.js) flags two
 // cases: neither a Take Profit nor a Stop Loss is set at all, OR a Stop
@@ -267,6 +272,27 @@ export default function App() {
     return marketMainView.joined
   }, [marketMainView.joined, marketViewFilter])
 
+  // Chart's own A&B/A-only filter -- "A&B" (default) keeps only rows with a
+  // real B-side match (B_Platform set -- see computeMainView's ruleTarget/r
+  // lookup: a row only gets B_* fields when a matchRule paired it with an
+  // actual B-side position), "A only" keeps just the opposite, rows with
+  // nothing on the B side. A separate piece of state, same reasoning as
+  // mainViewFilter/marketViewFilter above -- its own tab, its own filter.
+  const [chartFilter, setChartFilter] = useState("both")
+
+  // Chart's rows -- always Account View's OPEN-position accounts (A_Symbol
+  // real, not "n/a"), regardless of whatever mainViewFilter happens to be
+  // set to on the Account View tab itself; a flat account has no symbol to
+  // put on a bar, so there's no "Inactive"/"All" equivalent here. Also
+  // drops any row whose A_PLPct isn't a real number (e.g. no ProfitTarget
+  // scraped yet) -- can't place it on the red/green axis at all. Then
+  // chartFilter narrows further to A&B-matched rows or A-only rows.
+  const chartRows = useMemo(() => {
+    const base = mainView.joined.filter((row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_PLPct)))
+    if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
+    return base.filter((row) => row.B_Platform)
+  }, [mainView.joined, chartFilter])
+
   const [editingRow, setEditingRow] = useState(null)
 
   // The top-right row count: on MainView specifically, this should track
@@ -277,7 +303,14 @@ export default function App() {
   // change what's on screen. Market View mirrors this with its own
   // marketViewRows/marketViewFilter. Every other tab keeps showing
   // rows.length, unchanged.
-  const headerRowCount = active === "mainview" ? mainViewRows.length : active === "marketview" ? marketViewRows.length : rows.length
+  const headerRowCount =
+    active === "mainview"
+      ? mainViewRows.length
+      : active === "marketview"
+        ? marketViewRows.length
+        : active === "chart"
+          ? chartRows.length
+          : rows.length
 
   return (
     <div className="flex h-screen w-screen bg-slate-100">
@@ -382,6 +415,33 @@ export default function App() {
           <DataTable columns={ACCOUNTLOG_COLUMNS} rows={accountLogRows} />
         )}
 
+        {status === "ready" && active === "chart" && (
+          <>
+            <div className="mb-3 flex items-center gap-4 text-sm text-slate-600">
+              <span className="font-medium">Filter:</span>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="chart-filter"
+                  checked={chartFilter === "both"}
+                  onChange={() => setChartFilter("both")}
+                />
+                A&amp;B
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="chart-filter"
+                  checked={chartFilter === "aonly"}
+                  onChange={() => setChartFilter("aonly")}
+                />
+                A only
+              </label>
+            </div>
+            <ChartPage rows={chartRows} />
+          </>
+        )}
+
         {marketStatus === "ready" && active === "marketview" && (
           <>
             <div className="mb-3 flex items-center gap-4 text-sm text-slate-600">
@@ -475,6 +535,8 @@ function titleFor(id) {
       return "Account View"
     case "marketview":
       return "Market View"
+    case "chart":
+      return "Chart"
     case "settings":
       return "Settings"
     default:

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { id: "positionlog", label: "Position Log" },
   { id: "accountlog", label: "Account Log", short: "AL" },
   { id: "marketview", label: "Market View", short: "MV" },
+  { id: "chart", label: "Chart" },
   { id: "settings", label: "Settings" },
 ]
 

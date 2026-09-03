@@ -309,11 +309,26 @@ export function computeMainView(
     // once it hits its profit target. Blank if either side is
     // missing/non-numeric (e.g. no InitialBalance scraped yet).
     const targetEquity = addMoney(l.InitialBalance, l.ProfitTarget)
-    // (A_Equity - InitialBalance) / A_ProfitTarget as a percentage -- how
-    // much of the profit target has been realized so far. Blank if any side
-    // is missing/non-numeric or A_ProfitTarget is 0. Computed ahead of the
+    // A_PLPct ("A PL %") reads differently depending on whether A_Equity is
+    // at or above A_InitialBalance, or below it -- same numerator either
+    // way (A_Equity - InitialBalance), just a different denominator:
+    //  - Equity >= InitialBalance (or either is unknown): divide by
+    //    A_ProfitTarget -- how much of the profit target has been realized
+    //    so far.
+    //  - Equity < InitialBalance: divide by InitialBalance instead -- once
+    //    the account is underwater, "% of profit target" stops being a
+    //    meaningful reading (the shortfall isn't progress toward a profit
+    //    goal), so this switches to "the current shortfall as a % of the
+    //    account's own starting size" instead.
+    // Either way, blank if either side of whichever formula applies is
+    // missing/non-numeric or the denominator is 0. Computed ahead of the
     // push below so it can also feed A_PLPctWarning.
-    const plPct = pctOf(subMoney(l.Equity, l.InitialBalance), l.ProfitTarget)
+    const equityNum = toNumber(l.Equity)
+    const initialBalanceNum = toNumber(l.InitialBalance)
+    const plPct =
+      equityNum !== null && initialBalanceNum !== null && equityNum < initialBalanceNum
+        ? pctOf(subMoney(l.Equity, l.InitialBalance), l.InitialBalance)
+        : pctOf(subMoney(l.Equity, l.InitialBalance), l.ProfitTarget)
     // Computed ahead of the push below so it can also feed A_TPSLWarning --
     // once Daily DD is already flagged, a missing Stop Loss is a bigger
     // deal than usual, so that same warning state widens what counts as a
