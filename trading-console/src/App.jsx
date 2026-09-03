@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar"
 import RuleEditForm from "./components/RuleEditForm"
 import SettingsPage from "./components/SettingsPage"
 import AccountChartsPage from "./components/AccountChartsPage"
+import MarketChartsPage from "./components/MarketChartsPage"
 import AccountViewPage from "./components/AccountViewPage"
 import MarketViewPage from "./components/MarketViewPage"
 import PositionLogPage from "./components/PositionLogPage"
@@ -13,12 +14,12 @@ import AccountLogPage from "./components/AccountLogPage"
  * shared RuleEditForm modal's state (`editingRow`) -- both are inherently
  * cross-page UI state, not any one page's data. Every page fetches and
  * computes its own data itself (usePositionLog/useMarketPositions/
- * useAccountView/useMainViewFor/the settings hooks all live inside the
- * page components and their own lib/ hooks now, not here -- see each
- * page's own doc-comment for which it calls), so App.jsx doesn't import
- * or know about any of that; it just renders exactly one page component
- * for whichever tab is `active`, plus the modal when a row is being
- * edited.
+ * useAccountView/useMarketView/useMainViewFor/the settings hooks all live
+ * inside the page components and their own lib/ hooks now, not here -- see
+ * each page's own doc-comment for which it calls), so App.jsx doesn't
+ * import or know about any of that; it just renders exactly one page
+ * component for whichever tab is `active`, plus the modal when a row is
+ * being edited.
  */
 export default function App() {
   const [active, setActive] = useState("mainview")
@@ -34,6 +35,7 @@ export default function App() {
         {active === "accountlog" && <AccountLogPage />}
         {active === "chart" && <AccountChartsPage />}
         {active === "marketview" && <MarketViewPage onRowClick={setEditingRow} />}
+        {active === "marketchart" && <MarketChartsPage />}
         {active === "settings" && <SettingsPage />}
       </main>
 

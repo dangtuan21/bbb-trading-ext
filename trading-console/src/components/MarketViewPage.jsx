@@ -2,11 +2,7 @@ import { useMemo, useState } from "react"
 import DataTable from "./DataTable"
 import PageHeader from "./PageHeader"
 import { useMainViewColumns } from "../lib/mainViewColumns"
-import { useMainViewFor } from "../lib/useMainViewFor"
-import { useMarketPositions } from "../lib/useMarketPositions"
-import { useRelativeTime } from "../lib/relativeTime"
-
-const SOURCE_FILE = "data/market-positions.csv"
+import { useMarketView } from "../lib/useMarketView"
 
 /**
  * MarketViewPage: the Market View tab -- header, Active/Inactive/All
@@ -17,28 +13,22 @@ const SOURCE_FILE = "data/market-positions.csv"
  * View alone needs -- market-server no longer polls TwelveData on its own,
  * so a click here is the only thing that triggers a fetch.
  *
- * Fetches and computes its own data: useMarketPositions() for market-
- * positions.csv (nothing else in the app reads it, so unlike positions.csv
- * -- see useAccountView.js -- there's no shared hook to reuse, just this
- * page calling it directly) run through useMainViewFor(), the same
- * threshold-reading + computeMainView() wiring useAccountView.js shares
- * with positions.csv. `marketMainView.joined` is the FULL joined row set,
- * UNFILTERED by the Active/Inactive/All radios below (this page owns that
- * filter state and the filtering itself, just like AccountViewPage's own).
- * Columns come from useMainViewColumns() -- Account View reuses this exact
- * same hook/column set (see lib/mainViewColumns.js). `onRowClick` opens
- * RuleEditForm the same way (App.jsx's setEditingRow, a shared overlay
- * this page doesn't render itself) -- the only prop this page still needs
- * from outside, since refresh/refreshing/refreshError all come straight
- * from this page's own useMarketPositions() call now. rowBg is hardcoded
- * here the same way as AccountViewPage, since it needs nothing from
- * App.jsx.
+ * Fetches and computes its own data via useMarketView() -- the same shared
+ * hook MarketChartsPage uses (see that hook's own comment), the market-
+ * positions.csv counterpart to useAccountView.js. `mainView.joined` is the
+ * FULL joined row set, UNFILTERED by the Active/Inactive/All radios below
+ * (this page owns that filter state and the filtering itself, just like
+ * AccountViewPage's own). Columns come from useMainViewColumns() -- Account
+ * View reuses this exact same hook/column set (see lib/mainViewColumns.js).
+ * `onRowClick` opens RuleEditForm the same way (App.jsx's setEditingRow, a
+ * shared overlay this page doesn't render itself) -- the only prop this
+ * page still needs from outside, since refresh/refreshing/refreshError all
+ * come straight from useMarketView(). rowBg is hardcoded here the same way
+ * as AccountViewPage, since it needs nothing from App.jsx.
  */
 export default function MarketViewPage({ onRowClick }) {
-  const { rows: marketRows, status, error, updatedAt, refresh, refreshing, refreshError } = useMarketPositions()
-  const freshnessLabel = useRelativeTime(updatedAt)
-  const marketMainView = useMainViewFor(marketRows)
-  const rows = marketMainView.joined
+  const { mainView, status, error, sourceFile, freshnessLabel, refresh, refreshing, refreshError } = useMarketView()
+  const rows = mainView.joined
   const columns = useMainViewColumns()
 
   // Identical filter logic to AccountViewPage's own, just sourced from this
@@ -66,7 +56,7 @@ export default function MarketViewPage({ onRowClick }) {
         title="Market View"
         status={status}
         error={error}
-        sourceFile={SOURCE_FILE}
+        sourceFile={sourceFile}
         freshnessLabel={freshnessLabel}
         rowCount={filteredRows.length}
       />

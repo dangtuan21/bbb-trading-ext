@@ -10,11 +10,13 @@ const NAV_ITEMS = [
   { id: "positionlog", label: "Position Log" },
   { id: "accountlog", label: "Account Log", short: "AL" },
   { id: "marketview", label: "Market View", short: "MV" },
-  // One page, two stacked charts (Daily DD Chart on top, Full Chart below
-  // it) -- see the "chart" render branch in App.jsx. `short` override since
-  // the default first letter "A" would otherwise collide with "Account
-  // View"/"Account Log" above.
+  // Account Chart/Market Chart: each one page holding two stacked charts
+  // (Daily DD Chart on top, Full Chart below it) -- see AccountChartsPage/
+  // MarketChartsPage. `short` overrides since the default first letter "A"
+  // would otherwise collide with "Account View"/"Account Log" above, and
+  // "M" would collide with "Market View".
   { id: "chart", label: "Account Chart", short: "AC" },
+  { id: "marketchart", label: "Market Chart", short: "MC" },
   { id: "settings", label: "Settings" },
 ]
 
