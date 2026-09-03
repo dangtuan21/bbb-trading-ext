@@ -66,6 +66,15 @@ function sideOf(key) {
  * value. Takes precedence over money/pct when set, since a column needing
  * a custom display transform is never also a $ or % one.
  *
+ * `width` (optional) -- a Tailwind min-width class (e.g. "min-w-[7rem]"),
+ * applied to both the header and body cells of that column. Only needed
+ * for a two-line label (`\n` in it, see below) whose second line is wider
+ * than the column would otherwise render -- without it, whitespace-pre-line
+ * still auto-wraps a too-wide line segment onto extra lines rather than
+ * overflowing, so a label meant to be exactly two lines (e.g. MainView's
+ * "A\nTarget Equity") can end up three or four. Plain single-line columns
+ * size themselves from their content as before and don't need this.
+ *
  * `rowBg(row)` (optional prop, not a column option) -- like `highlightIf`
  * but for the WHOLE row rather than one column: when it returns a
  * truthy Tailwind class, every cell in that row uses it instead of that
@@ -113,7 +122,7 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                 // that opt in.
                 className={`${col.label.includes("\n") ? "whitespace-pre-line" : "whitespace-nowrap"} px-3 py-2 text-xs font-semibold tracking-wide ${
                   col.numeric ? "text-right" : "text-left"
-                } ${col.headerBg ?? SIDE_HEADER_BG[sideOf(col.key)] ?? ""}`}
+                } ${col.headerBg ?? SIDE_HEADER_BG[sideOf(col.key)] ?? ""} ${col.width ?? ""}`}
               >
                 {col.label}
               </th>
@@ -149,7 +158,7 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
                 return (
                   <td
                     key={col.key}
-                    className={`whitespace-nowrap px-3 py-2 transition-shadow duration-100 group-hover:shadow-[inset_0_0_0_9999px_rgba(15,23,42,0.06)] ${
+                    className={`whitespace-nowrap px-3 py-2 transition-shadow duration-100 group-hover:shadow-[inset_0_0_0_9999px_rgba(15,23,42,0.06)] ${col.width ?? ""} ${
                       col.numeric ? "text-right tabular-nums" : "text-left"
                     } ${cellBg} ${
                       rowBackground ? "text-black" : isNegative ? "text-red-600" : "text-slate-700"

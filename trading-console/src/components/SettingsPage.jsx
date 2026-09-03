@@ -96,7 +96,7 @@ function HiddenAccountsSection({ hiddenAccounts }) {
     <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <h3 className="mb-1 text-sm font-semibold text-slate-700">Hidden Accounts</h3>
       <p className="mb-3 text-xs text-slate-400">
-        Excluded from MainView -- still scraped and recorded, just not shown.
+        Excluded from Account View -- still scraped and recorded, just not shown.
       </p>
       {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
       <ul className="flex flex-col gap-1.5">

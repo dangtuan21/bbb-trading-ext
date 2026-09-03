@@ -1,9 +1,15 @@
 import { useState } from "react"
 
+// `short` overrides the collapsed icon-rail's default first-letter, for any
+// pair of labels that would otherwise collapse to the same letter with
+// nothing to tell them apart until you hover: "Account View"/"Account Log"
+// both start with "A", and "Market View" would otherwise match "Account
+// View"'s old "Main View" wording's "M".
 const NAV_ITEMS = [
-  { id: "mainview", label: "Main View" },
+  { id: "mainview", label: "Account View", short: "AV" },
   { id: "positionlog", label: "Position Log" },
-  { id: "accountlog", label: "Account Log" },
+  { id: "accountlog", label: "Account Log", short: "AL" },
+  { id: "marketview", label: "Market View", short: "MV" },
   { id: "settings", label: "Settings" },
 ]
 
@@ -57,7 +63,7 @@ export default function Sidebar({ active, onSelect }) {
                 : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
-            {collapsed ? item.label.charAt(0) : item.label}
+            {collapsed ? item.short ?? item.label.charAt(0) : item.label}
           </button>
         ))}
       </nav>

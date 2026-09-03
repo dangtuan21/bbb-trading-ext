@@ -10,6 +10,17 @@ ext-server/*.csv
 trading-console/public/data/*.csv
 trading-console/public/data/positions.csv
 
+# Runtime data written by market-server (see market-server/server.js) --
+# live FX rates, refreshed every config.json-defined interval. Mirrored copy
+# under trading-console/public/data/ is already covered by the *.csv
+# wildcard above.
+market-server/*.csv
+
+# TwelveData API key -- see ENV_FILE in market-server/server.js. Copy
+# market-server/.env.example (checked in) to market-server/.env and fill in
+# TWELVEDATA_API_KEY; .env itself never lands in git.
+market-server/.env
+
 # Pushover credentials for the warning -> phone-notification feature -- see
 # ENV_FILE in ext-server/server.js. Copy ext-server/.env.example (checked
 # in) to ext-server/.env and fill in real values; .env itself never lands
