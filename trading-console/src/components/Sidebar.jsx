@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { id: "positionlog", label: "Position Log" },
   { id: "accountlog", label: "Account Log", short: "AL" },
   { id: "marketview", label: "Market View", short: "MV" },
+  // One page, two stacked charts (Full Chart on top, Daily DD Chart below
+  // it) -- see the "chart" render branch in App.jsx.
   { id: "chart", label: "Chart" },
   { id: "settings", label: "Settings" },
 ]

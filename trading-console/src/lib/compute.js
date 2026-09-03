@@ -310,24 +310,28 @@ export function computeMainView(
     // missing/non-numeric (e.g. no InitialBalance scraped yet).
     const targetEquity = addMoney(l.InitialBalance, l.ProfitTarget)
     // A_PLPct ("A PL %") reads differently depending on whether A_Equity is
-    // at or above A_InitialBalance, or below it -- same numerator either
-    // way (A_Equity - InitialBalance), just a different denominator:
-    //  - Equity >= InitialBalance (or either is unknown): divide by
-    //    A_ProfitTarget -- how much of the profit target has been realized
-    //    so far.
-    //  - Equity < InitialBalance: divide by InitialBalance instead -- once
-    //    the account is underwater, "% of profit target" stops being a
-    //    meaningful reading (the shortfall isn't progress toward a profit
-    //    goal), so this switches to "the current shortfall as a % of the
-    //    account's own starting size" instead.
+    // at or above A_InitialBalance, or below it:
+    //  - Equity >= InitialBalance (or either is unknown): (Equity -
+    //    InitialBalance) / A_ProfitTarget -- how much of the profit target
+    //    has been realized so far.
+    //  - Equity < InitialBalance: -CurrentValueAmount / MaxDrawdownAmount
+    //    ("Cur DD" and "Max DD" -- both scraped as positive dollar
+    //    magnitudes, see A_MaxDrawdownAmount/A_CurrentValueAmount above)
+    //    instead -- once the account is underwater, "% of profit target"
+    //    stops being a meaningful reading (the shortfall isn't progress
+    //    toward a profit goal), so this switches to "how much of the max
+    //    drawdown allowance has been used up" instead, negated so it reads
+    //    as a loss (0% used up -> 0%, the full allowance used up -> -100%)
+    //    even though both DD figures themselves are positive magnitudes.
     // Either way, blank if either side of whichever formula applies is
     // missing/non-numeric or the denominator is 0. Computed ahead of the
     // push below so it can also feed A_PLPctWarning.
     const equityNum = toNumber(l.Equity)
     const initialBalanceNum = toNumber(l.InitialBalance)
+    const ddPct = pctOf(l.CurrentValueAmount, l.MaxDrawdownAmount)
     const plPct =
       equityNum !== null && initialBalanceNum !== null && equityNum < initialBalanceNum
-        ? pctOf(subMoney(l.Equity, l.InitialBalance), l.InitialBalance)
+        ? ddPct === "" ? "" : round2(-ddPct)
         : pctOf(subMoney(l.Equity, l.InitialBalance), l.ProfitTarget)
     // Computed ahead of the push below so it can also feed A_TPSLWarning --
     // once Daily DD is already flagged, a missing Stop Loss is a bigger

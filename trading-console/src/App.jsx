@@ -57,12 +57,13 @@ const ACCOUNTLOG_COLUMNS = [
 // computed in computeMainView. Placed next to A_Equity (its "current"
 // counterpart) the same way A_ProfitTarget sits next to A_AccountPL, with
 // its own violet background; no highlightIf on either.
-// A_PLPct ("A PL %") -- computed in computeMainView, same numerator either
-// way (A_Equity - A_InitialBalance), just a different denominator: divided
-// by A_ProfitTarget while Equity is at or above InitialBalance (how much of
-// the profit target has been realized), or by A_InitialBalance itself once
-// Equity has dropped below it (the shortfall as a % of starting size) --
-// see the comment on plPct in compute.js for why.
+// A_PLPct ("A PL %") -- computed in computeMainView: (A_Equity -
+// A_InitialBalance) / A_ProfitTarget while Equity is at or above
+// InitialBalance (how much of the profit target has been realized), or
+// -A_CurrentValueAmount / A_MaxDrawdownAmount -- "Cur DD"/"Max DD" -- once
+// Equity has dropped below InitialBalance (how much of the max drawdown
+// allowance has been used up, negated so it reads as a loss) -- see the
+// comment on plPct in compute.js for why.
 // Shown right after A_Equity, but plain (no background styling of its own)
 // -- just its warning flag (A_PLPctWarning, fired once A_PLPct itself
 // reaches Warning Target Profit %), same amber highlight as every other
@@ -272,23 +273,45 @@ export default function App() {
     return marketMainView.joined
   }, [marketMainView.joined, marketViewFilter])
 
-  // Chart's own A&B/A-only filter -- "A&B" (default) keeps only rows with a
-  // real B-side match (B_Platform set -- see computeMainView's ruleTarget/r
-  // lookup: a row only gets B_* fields when a matchRule paired it with an
-  // actual B-side position), "A only" keeps just the opposite, rows with
-  // nothing on the B side. A separate piece of state, same reasoning as
-  // mainViewFilter/marketViewFilter above -- its own tab, its own filter.
+  // Chart page's A&B/A-only filter -- "A&B" (default) keeps only rows with
+  // a real B-side match (B_Platform set -- see computeMainView's
+  // ruleTarget/r lookup: a row only gets B_* fields when a matchRule
+  // paired it with an actual B-side position), "A only" keeps just the
+  // opposite, rows with nothing on the B side. One shared piece of state
+  // for BOTH charts on the page (Full Chart and Daily DD Chart) -- they're
+  // two views of the same account set, so switching this should move both
+  // sections together rather than each having its own independent filter
+  // (that was tried and reverted -- see chartRows/dailyDdChartRows below,
+  // both keyed off this same chartFilter).
   const [chartFilter, setChartFilter] = useState("both")
 
-  // Chart's rows -- always Account View's OPEN-position accounts (A_Symbol
-  // real, not "n/a"), regardless of whatever mainViewFilter happens to be
-  // set to on the Account View tab itself; a flat account has no symbol to
-  // put on a bar, so there's no "Inactive"/"All" equivalent here. Also
-  // drops any row whose A_PLPct isn't a real number (e.g. no ProfitTarget
-  // scraped yet) -- can't place it on the red/green axis at all. Then
-  // chartFilter narrows further to A&B-matched rows or A-only rows.
+  // Full Chart's rows -- always Account View's OPEN-position accounts
+  // (A_Symbol real, not "n/a"), regardless of whatever mainViewFilter
+  // happens to be set to on the Account View tab itself; a flat account
+  // has no symbol to put on a bar, so there's no "Inactive"/"All"
+  // equivalent here. Also drops any row whose A_PLPct isn't a real number
+  // (e.g. no ProfitTarget scraped yet) -- can't place it on the red/green
+  // axis at all. Then chartFilter narrows further to A&B-matched rows or
+  // A-only rows.
   const chartRows = useMemo(() => {
     const base = mainView.joined.filter((row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_PLPct)))
+    if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
+    return base.filter((row) => row.B_Platform)
+  }, [mainView.joined, chartFilter])
+
+  // Daily DD Chart -- same nav grouping as Full Chart (stacked right below
+  // it on the "chart" page) and reuses the exact same ChartPage component,
+  // just plotting A_TodayDrawdownPct ("Cur Daily DD %") instead of A_PLPct
+  // -- see ChartPage's pctKey prop. Shares chartFilter with Full Chart
+  // (see above) rather than having its own filter state. A 0% row still
+  // shows (most accounts haven't moved on their daily drawdown yet at any
+  // given snapshot, and that's real information too, not a reason to hide
+  // the row) -- ChartPage just skips drawing a bar for it, see its own
+  // isZero handling.
+  const dailyDdChartRows = useMemo(() => {
+    const base = mainView.joined.filter(
+      (row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_TodayDrawdownPct))
+    )
     if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
     return base.filter((row) => row.B_Platform)
   }, [mainView.joined, chartFilter])
@@ -303,14 +326,18 @@ export default function App() {
   // change what's on screen. Market View mirrors this with its own
   // marketViewRows/marketViewFilter. Every other tab keeps showing
   // rows.length, unchanged.
+  // "chart" is excluded here (see the header's own `active !== "chart"`
+  // check below) -- it's now a single page holding two charts (Full Chart/
+  // Daily DD Chart) with two different row counts (chartRows.length vs
+  // dailyDdChartRows.length), so there's no one number that belongs in the
+  // shared top-right header; each section shows its own count next to its
+  // own filter instead.
   const headerRowCount =
     active === "mainview"
       ? mainViewRows.length
       : active === "marketview"
         ? marketViewRows.length
-        : active === "chart"
-          ? chartRows.length
-          : rows.length
+        : rows.length
 
   return (
     <div className="flex h-screen w-screen bg-slate-100">
@@ -321,7 +348,11 @@ export default function App() {
           <h2 className="text-xl font-semibold text-slate-800">{titleFor(active)}</h2>
           {activeStatus === "ready" && active !== "settings" && (
             <span className="text-xs text-slate-400">
-              {headerRowCount} row{headerRowCount === 1 ? "" : "s"} · {activeRelativeUpdatedAt ?? activeSourceFile}
+              {/* "chart" holds two charts with two different row counts --
+                  see headerRowCount above -- so this just drops the count
+                  and keeps the freshness label on its own. */}
+              {active !== "chart" && `${headerRowCount} row${headerRowCount === 1 ? "" : "s"} · `}
+              {activeRelativeUpdatedAt ?? activeSourceFile}
             </span>
           )}
         </header>
@@ -415,9 +446,19 @@ export default function App() {
           <DataTable columns={ACCOUNTLOG_COLUMNS} rows={accountLogRows} />
         )}
 
+        {/* Both charts on one page now (previously two separate nav items/
+            tabs) -- Daily DD Chart on top, Full Chart stacked right below
+            it. One shared Filter control up top (chartFilter -- see above)
+            drives both sections together; each section keeps its own
+            heading and its own row count (shown inline here instead of the
+            shared header -- see headerRowCount above), since Full Chart
+            and Daily DD Chart can still land on different row counts even
+            under the same A&B/A-only filter (a numeric A_PLPct vs a
+            numeric A_TodayDrawdownPct isn't guaranteed to match row for
+            row). */}
         {status === "ready" && active === "chart" && (
-          <>
-            <div className="mb-3 flex items-center gap-4 text-sm text-slate-600">
+          <div className="flex flex-col gap-8">
+            <div className="flex items-center gap-4 text-sm text-slate-600">
               <span className="font-medium">Filter:</span>
               <label className="flex cursor-pointer items-center gap-1.5">
                 <input
@@ -438,8 +479,27 @@ export default function App() {
                 A only
               </label>
             </div>
-            <ChartPage rows={chartRows} />
-          </>
+
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">Daily DD Chart</h3>
+                <span className="text-xs text-slate-400">
+                  {dailyDdChartRows.length} row{dailyDdChartRows.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <ChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" />
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">Full Chart</h3>
+                <span className="text-xs text-slate-400">
+                  {chartRows.length} row{chartRows.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <ChartPage rows={chartRows} />
+            </section>
+          </div>
         )}
 
         {marketStatus === "ready" && active === "marketview" && (
