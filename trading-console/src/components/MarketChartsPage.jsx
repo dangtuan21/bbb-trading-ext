@@ -105,7 +105,7 @@ export default function MarketChartsPage() {
                 {dailyDdChartRows.length} row{dailyDdChartRows.length === 1 ? "" : "s"}
               </span>
             </div>
-            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" />
+            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" />
           </section>
 
           <section>

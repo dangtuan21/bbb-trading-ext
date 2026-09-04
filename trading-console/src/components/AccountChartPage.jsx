@@ -52,7 +52,7 @@ import { formatPct } from "../lib/compute"
  * read off the two ends of the chart nearest the green/red boundary, not
  * one single top-to-bottom ranking across both colors.
  */
-export default function AccountChartPage({ rows, pctKey = "A_PLPct" }) {
+export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600" }) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">
@@ -110,7 +110,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct" }) {
                     <>
                       <div
                         style={{ width: `${widthPct}%` }}
-                        className="flex h-6 min-w-8 items-center rounded-r bg-emerald-600 px-2"
+                        className={`flex h-6 min-w-8 items-center rounded-r ${positiveColorClass} px-2`}
                       >
                         <span className="truncate text-xs font-medium text-white">{label}</span>
                       </div>
