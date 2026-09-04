@@ -88,8 +88,8 @@
             "match-B-position": "tastyfx|DTEN3|EUR/NZD"
         },
         {
-            "A-position": "RebelsFunding|22026430966781|AUD/USD",
-            "match-B-position": "tastyfx|DTEN3|AUD/USD"
+            "A-position": "RebelsFunding|22026430966781|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/CAD"
         },
         {
             "A-position": "RebelsFunding|22026431312776|EUR/USD",
@@ -102,6 +102,18 @@
         {
             "A-position": "RebelsFunding|22026431551303|AUD/NZD",
             "match-B-position": "tastyfx|DTEN3|AUD/NZD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/USD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/CAD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/CAD"
         }
     ],
     "hidden-accounts": [

@@ -60,6 +60,7 @@ const POSITIONS_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'positions.csv');
 // reloads the page -- no separate fetch/mirror path needed for the frontend
 // to see it.
 const MATCH_RULES_CONFIG_FILE = path.join(__dirname, '..', 'trading-console', 'src', 'data-fact', 'config.json');
+const CONFIG_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'config.json');
 
 // Non-secret tuning for the warning -> phone-notification feature below
 // (Pushover credentials themselves live in .env -- see ENV_FILE above, not
@@ -360,6 +361,8 @@ function applyRuleEdit(payload) {
   }
 
   fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+  fs.mkdirSync(FRONTEND_DATA_DIR, { recursive: true });
+  fs.writeFileSync(CONFIG_MIRROR_FILE, formatConfigJson(configJson));
 }
 
 // Removes one position-rule entry entirely (RuleEditForm's "Delete" button).
@@ -379,6 +382,8 @@ function deleteRule(payload) {
   rules.splice(idx, 1);
 
   fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+  fs.mkdirSync(FRONTEND_DATA_DIR, { recursive: true });
+  fs.writeFileSync(CONFIG_MIRROR_FILE, formatConfigJson(configJson));
 }
 
 // Adds/removes one "Platform|AccountID" key from config.json's
@@ -399,6 +404,8 @@ function setAccountHidden(payload) {
   configJson['hidden-accounts'] = [...set];
 
   fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+  fs.mkdirSync(FRONTEND_DATA_DIR, { recursive: true });
+  fs.writeFileSync(CONFIG_MIRROR_FILE, formatConfigJson(configJson));
 }
 
 // JSON.stringify(_, null, 4) explodes every array onto its own lines, which

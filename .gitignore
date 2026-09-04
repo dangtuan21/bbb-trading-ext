@@ -9,6 +9,7 @@ node_modules/
 ext-server/*.csv
 trading-console/public/data/*.csv
 trading-console/public/data/positions.csv
+trading-console/public/data/config.json
 
 # Runtime data written by market-server (see market-server/server.js) --
 # live FX rates, refreshed every config.json-defined interval. Mirrored copy

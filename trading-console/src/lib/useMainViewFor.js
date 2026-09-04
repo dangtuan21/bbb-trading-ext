@@ -1,7 +1,6 @@
 import { useMemo } from "react"
 import { computeMainView } from "./compute"
-import { matchRules } from "./matchRules"
-import { hiddenAccounts } from "./hiddenAccounts"
+import { useConfigView } from "./useConfigView"
 import {
   useWarningDailyDrawdownThreshold,
   useWarningDrawdownThreshold,
@@ -11,14 +10,17 @@ import {
 /**
  * useMainViewFor(rows): runs `rows` (already-fetched positions.csv or
  * market-positions.csv rows) through computeMainView() along with the
- * three drawdown/profit warning thresholds (matchRules/hiddenAccounts are
- * fixed app-wide config, not per-caller data). Factored out so both
- * useAccountView.js (positions.csv) and MarketViewPage.jsx (market-
- * positions.csv) share the exact same threshold-reading + compute wiring
- * instead of each duplicating it -- they're two different row sets run
- * through identical logic, not two different behaviors.
+ * three drawdown/profit warning thresholds and the live matchRules/
+ * hiddenAccounts -- fetched at runtime via useConfigView(), not the old
+ * build-time-only static JSON import (see useConfigView.js for why that
+ * mattered). Factored out so both useAccountView.js (positions.csv) and
+ * MarketViewPage.jsx (market-positions.csv) share the exact same
+ * threshold-reading + compute wiring instead of each duplicating it --
+ * they're two different row sets run through identical logic, not two
+ * different behaviors.
  */
 export function useMainViewFor(rows) {
+  const { matchRules, hiddenAccounts } = useConfigView()
   const [warningDailyDrawdownPct] = useWarningDailyDrawdownThreshold()
   const [warningDrawdownPct] = useWarningDrawdownThreshold()
   const [warningTargetProfitPct] = useWarningTargetProfitThreshold()
@@ -33,6 +35,13 @@ export function useMainViewFor(rows) {
         warningTargetProfitPct,
         hiddenAccounts
       ),
-    [rows, warningDailyDrawdownPct, warningDrawdownPct, warningTargetProfitPct]
+    [
+      rows,
+      matchRules,
+      hiddenAccounts,
+      warningDailyDrawdownPct,
+      warningDrawdownPct,
+      warningTargetProfitPct,
+    ]
   )
 }
