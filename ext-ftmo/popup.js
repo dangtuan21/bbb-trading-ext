@@ -1,4 +1,4 @@
-const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+const SERVER_URL = 'https://moreleadnow.com/api/ext';
 // Fill in after generating the Caddy Basic Auth password on the server
 // (see deploy/README.md, step 6) -- keep this repo private, this is the
 // only thing standing between the internet and your account balances.

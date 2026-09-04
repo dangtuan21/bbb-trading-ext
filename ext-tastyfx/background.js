@@ -4,7 +4,7 @@
 // fetch() from the service worker works with no user gesture and no tab
 // needing to stay open, unlike the File System Access API.
 
-const SERVER_URL = 'https://trading.moreleadnow.com/api/ext';
+const SERVER_URL = 'https://moreleadnow.com/api/ext';
 // Fill in after generating the Caddy Basic Auth password on the server
 // (see deploy/README.md, step 6) -- keep this repo private, this is the
 // only thing standing between the internet and your account balances.

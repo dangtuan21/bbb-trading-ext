@@ -11,7 +11,7 @@
 #
 # Install: sudo cp Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
-trading.moreleadnow.com {
+moreleadnow.com, www.moreleadnow.com {
 	basic_auth {
 		tuan $2b$10$3fvT0efVeKA953PBj9GcY.3qeChyB2IkoXmlx7VekSgzl/iPWnoKy
 	}

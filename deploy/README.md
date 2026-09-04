@@ -1,6 +1,6 @@
 # Deploying bbb-trading-ext
 
-Target: DigitalOcean droplet, Ubuntu 24.04, 1GB RAM, trading.moreleadnow.com.
+Target: DigitalOcean droplet, Ubuntu 24.04, 1GB RAM, moreleadnow.com.
 
 ## 1. Server prep (one time)
 ```
@@ -50,12 +50,12 @@ sudo cp /opt/bbb-trading-ext/deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 Caddy auto-provisions the Let's Encrypt cert on first request once DNS for
-trading.moreleadnow.com points at this droplet's IP.
+moreleadnow.com points at this droplet's IP.
 
 ## 7. Verify
 ```
 systemctl status ext-server market-server caddy
-curl -u tuan:<password> https://trading.moreleadnow.com/api/ext/status
+curl -u tuan:<password> https://moreleadnow.com/api/ext/status
 ```
 
 ## Redeploying after code changes
