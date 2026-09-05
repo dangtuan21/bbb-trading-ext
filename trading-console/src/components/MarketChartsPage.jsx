@@ -24,10 +24,17 @@ import { useDailyDdChartScaleMax } from "../lib/settings"
  * row sets from it (see chartRows/dailyDdChartRows below). No row count in
  * the shared PageHeader (there are two different ones, shown per-section
  * instead) -- see PageHeader's own `rowCount` comment.
+ *
+ * Also surfaces the same Refresh button as Market View (see that page's
+ * comment on why one exists at all -- market-server doesn't auto-poll
+ * TwelveData). refresh/refreshing/refreshError come straight off this
+ * page's own useMarketView() call above, same live state Market View's
+ * button drives -- clicking Refresh here updates both tabs' data since
+ * they share the same underlying market-positions.csv.
  */
 export default function MarketChartsPage() {
   const [dailyDdChartScaleMax] = useDailyDdChartScaleMax()
-  const { mainView, status, error, sourceFile, freshnessLabel } = useMarketView()
+  const { mainView, status, error, sourceFile, freshnessLabel, refresh, refreshing, refreshError } = useMarketView()
   const rows = mainView.joined
   // "A&B" (default) keeps only rows with a real B-side match (B_Platform
   // set -- see computeMainView's ruleTarget/r lookup: a row only gets B_*
@@ -98,7 +105,25 @@ export default function MarketChartsPage() {
               />
               A only
             </label>
+            {/* Same "no auto-poll, click here to fetch" button as Market
+                View's own Refresh (see that page's comment) -- this page
+                already calls useMarketView() itself, so refresh/refreshing/
+                refreshError are the exact same live state Market View's
+                button drives, not a separate copy. */}
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              className="ml-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+            >
+              {refreshing ? "Fetching..." : "Refresh"}
+            </button>
           </div>
+          {refreshError && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              Refresh failed: {refreshError}
+            </p>
+          )}
 
           <section>
             <div className="mb-3">
