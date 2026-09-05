@@ -20,6 +20,14 @@ const MARKET_POSITIONS_URL = `${import.meta.env.BASE_URL}data/market-positions.c
 // server/server.js's PORT.
 const MARKET_SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8766" : "/api/market"
 
+// ext-server's own URL (same value RuleEditForm.jsx/SettingsPage.jsx use as
+// SERVER_URL) -- refresh() below posts to its /notify/check once a market
+// fetch succeeds, so "Alert Data Source: Market" (see SettingsPage) notices
+// a threshold crossed by the fresh numbers. market-server has no way to
+// call ext-server itself (two independent processes/ports), so this fire-
+// and-forget call from the browser is what closes that loop.
+const EXT_SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
+
 function cleanRow(row) {
   const out = {}
   for (const field of POSITIONLOG_FIELDS) {
@@ -120,6 +128,11 @@ export function useMarketPositions() {
       setRows(body.marketPositions.map(cleanRow))
       setUpdatedAt(new Date(body.fetchedAt))
       setStatus("ready")
+      // Fire-and-forget -- a failure here (e.g. ext-server not running
+      // locally) shouldn't be surfaced as a failed market refresh; it just
+      // means "Alert Data Source: Market" won't notice this particular
+      // update until the next successful one. See EXT_SERVER_URL above.
+      fetch(`${EXT_SERVER_URL}/notify/check`, { method: "POST" }).catch(() => {})
     } catch (err) {
       setRefreshError(err.message)
     } finally {

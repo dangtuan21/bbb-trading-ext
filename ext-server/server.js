@@ -52,6 +52,12 @@ const POSITIONS_FILE = path.join(__dirname, 'positions.csv');
 const FRONTEND_DATA_DIR = path.join(__dirname, '..', 'trading-console', 'public', 'data');
 const POSITIONS_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'positions.csv');
 
+// market-server's own output (see market-server/server.js's
+// MARKET_POSITIONS_MIRROR_FILE) -- this server never writes this file, only
+// reads it, and only when notify-config.json's "dataSource" is "market"
+// (see collectASideAccounts below).
+const MARKET_POSITIONS_FILE = path.join(FRONTEND_DATA_DIR, 'market-positions.csv');
+
 // Written directly (not mirrored) -- unlike positions.csv this IS the
 // checked-in source file trading-console's matchRules.js imports at build
 // time, so MainView's rule-editing UI (see App.jsx) intentionally leaves an
@@ -88,9 +94,23 @@ const CONFIG_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'config.json');
 //                        // once ever -- e.g. plPct at 80%, then again at 90%,
 //                        // 95%, 100% as it keeps climbing (see tierLadderFor).
 //       "plPct": [80, 90, 95, 100]
-//     }
+//     },
+//     "dataSource": "market"  // optional -- "market" (default) or "account".
+//                        // Which rows checkWarningsAndNotify evaluates: the
+//                        // FX-priced reconstruction market-server writes to
+//                        // market-positions.csv (matches Market View/Market
+//                        // Chart), or this server's own scraped
+//                        // positions.csv (matches Account View/Account
+//                        // Chart) -- see collectASideAccounts. Written by
+//                        // SettingsPage's "Alert Data Source" radios via
+//                        // POST /config/notify-data-source, not hand-edited
+//                        // like the fields above.
 //   }
 const NOTIFY_CONFIG_FILE = path.join(__dirname, 'notify-config.json');
+
+// Default when notify-config.json has no "dataSource" (including when the
+// file doesn't exist yet at all) -- matches SettingsPage's radio default.
+const DEFAULT_NOTIFY_DATA_SOURCE = 'market';
 
 // Mirrors trading-console's src/lib/settings.js DEFAULT_WARNING_* constants.
 // That file's thresholds live in the browser's localStorage (a personal
@@ -454,6 +474,49 @@ function loadNotifyConfig() {
   }
 }
 
+// Merges `patch` into whatever's currently in notify-config.json (creating
+// it, and its own JSON shape, on first write -- this file doesn't exist on
+// a fresh checkout, same as .env) and writes the result back. Only ever
+// called with a flat set of top-level keys (currently just dataSource), so
+// a shallow spread is enough -- doesn't need formatConfigJson's array-
+// collapsing (this file has no numeric arrays at its top level the way
+// config.json's rules do).
+function saveNotifyConfig(patch) {
+  const current = loadNotifyConfig();
+  const next = { ...current, ...patch };
+  fs.writeFileSync(NOTIFY_CONFIG_FILE, JSON.stringify(next, null, 2) + '\n');
+  return next;
+}
+
+// Reads an arbitrary CSV file on demand (not cached -- unlike
+// loadExistingPositions/platformRows, which are read once at startup and
+// kept in memory) and returns its rows as plain objects keyed by the
+// header. Used for market-positions.csv, re-read fresh every
+// checkWarningsAndNotify() call in "market" mode so it always reflects
+// market-server's latest write, same "no caching, no staleness" approach
+// loadNotifyConfig already takes for notify-config.json. Returns [] for a
+// missing file (market-server hasn't been triggered yet) or an empty one,
+// same as loadExistingPositions' own missing-file handling.
+function readCsvRows(filePath) {
+  let text;
+  try {
+    text = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return [];
+  }
+  const lines = text.split('\n').filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+  const header = parseCsvLine(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCsvLine(lines[i]);
+    const row = {};
+    header.forEach((key, idx) => { row[key] = fields[idx] ?? ''; });
+    rows.push(row);
+  }
+  return rows;
+}
+
 function toNum(value) {
   const n = parseFloat(value);
   return Number.isNaN(n) ? null : n;
@@ -653,7 +716,18 @@ async function sendPushover(title, message, { priority = 0, sound } = {}) {
 // hasOpenPosition suppresses every MainView highlight for a no-position
 // row -- an account with nothing open shouldn't buzz your phone off its
 // stale last-known Balance/Equity/drawdown figures either.
-function collectASideAccounts() {
+//
+// `dataSource` (from notify-config.json, see NOTIFY_CONFIG_FILE's comment)
+// picks which rows feed all of this: "account" reads this server's own
+// in-memory platformRows (exactly the old/only behavior, matching Account
+// View/Account Chart's positions.csv); "market" (the default) reads
+// market-server's market-positions.csv fresh off disk instead (matching
+// Market View/Market Chart's FX-priced numbers) via readCsvRows -- same
+// row shape either way (market-positions.csv is deliberately written in
+// positions.csv's own format, see market-server/server.js), so the
+// aggregation loop below doesn't need to know or care which source it's
+// reading.
+function collectASideAccounts(dataSource) {
   let hiddenKeys;
   try {
     const configJson = JSON.parse(fs.readFileSync(MATCH_RULES_CONFIG_FILE, 'utf8'));
@@ -662,18 +736,21 @@ function collectASideAccounts() {
     hiddenKeys = new Set();
   }
 
+  const rawRows =
+    dataSource === 'account'
+      ? PLATFORM_ORDER.flatMap((platformKey) => platformRows[platformKey])
+      : readCsvRows(MARKET_POSITIONS_FILE);
+
   const seen = new Map();
-  for (const platformKey of PLATFORM_ORDER) {
-    for (const row of platformRows[platformKey]) {
-      if (!NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
-      const key = `${row.Platform}|${row.AccountID}`;
-      if (hiddenKeys.has(key)) continue;
-      if (!seen.has(key)) seen.set(key, { ...row, _hasTakeProfit: false, _hasStopLoss: false, _hasOpenPosition: false });
-      const acct = seen.get(key);
-      if (row.TakeProfitPrice && row.TakeProfitPrice !== 'none') acct._hasTakeProfit = true;
-      if (row.StopLossPrice && row.StopLossPrice !== 'none') acct._hasStopLoss = true;
-      if (row.Symbol && row.Symbol !== 'n/a') acct._hasOpenPosition = true;
-    }
+  for (const row of rawRows) {
+    if (!NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
+    const key = `${row.Platform}|${row.AccountID}`;
+    if (hiddenKeys.has(key)) continue;
+    if (!seen.has(key)) seen.set(key, { ...row, _hasTakeProfit: false, _hasStopLoss: false, _hasOpenPosition: false });
+    const acct = seen.get(key);
+    if (row.TakeProfitPrice && row.TakeProfitPrice !== 'none') acct._hasTakeProfit = true;
+    if (row.StopLossPrice && row.StopLossPrice !== 'none') acct._hasStopLoss = true;
+    if (row.Symbol && row.Symbol !== 'n/a') acct._hasOpenPosition = true;
   }
   return [...seen.values()];
 }
@@ -711,8 +788,9 @@ function checkWarningsAndNotify() {
   const cfg = loadNotifyConfig();
   const thresholds = { ...DEFAULT_NOTIFY_THRESHOLDS, ...cfg.thresholds };
   const metrics = WARNING_METRICS.filter((m) => cfg.metrics?.[m.key] !== false);
+  const dataSource = cfg.dataSource || DEFAULT_NOTIFY_DATA_SOURCE;
 
-  for (const row of collectASideAccounts()) {
+  for (const row of collectASideAccounts(dataSource)) {
     // No open position at all -- skip every metric for this account rather
     // than let stale last-known account-level numbers (Balance/Equity/DD
     // figures still carried on the account with nothing open) trigger a
@@ -887,6 +965,65 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: false, error: String(err) }));
       }
     });
+    return;
+  }
+
+  // SettingsPage's "Alert Data Source" radios read the current value from
+  // here on mount -- notify-config.json itself isn't reachable from the
+  // browser (it's a server-local file, not mirrored into
+  // trading-console/public/data like config.json is), so this is the only
+  // way the frontend ever sees it.
+  if (req.method === 'GET' && req.url === '/config/notify-settings') {
+    const cfg = loadNotifyConfig();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, dataSource: cfg.dataSource || DEFAULT_NOTIFY_DATA_SOURCE }));
+    return;
+  }
+
+  // SettingsPage's "Alert Data Source" radios post here on change. Body:
+  // { dataSource: "market" | "account" }.
+  if (req.method === 'POST' && req.url === '/config/notify-data-source') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (payload.dataSource !== 'market' && payload.dataSource !== 'account') {
+          throw new Error('dataSource must be "market" or "account"');
+        }
+        saveNotifyConfig({ dataSource: payload.dataSource });
+        console.log(`[${new Date().toISOString()}] config: alert data source set to ${payload.dataSource}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        console.error('Failed to update notify data source:', err);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+    });
+    return;
+  }
+
+  // Market data only ever changes when Market View/Market Chart's Refresh
+  // button is clicked (market-server never auto-polls -- see its own
+  // comment), so there's no equivalent of /write's automatic
+  // checkWarningsAndNotify() call to piggyback on for "market" mode.
+  // useMarketPositions.js's refresh() calls this right after a successful
+  // market-server fetch (fire-and-forget -- a failure here shouldn't be
+  // conflated with a failed market-data refresh) so alerts still notice a
+  // threshold crossed by the fresh data. Harmless to call in "account" mode
+  // too -- it's the same check /write already runs, just re-run on demand;
+  // tierState prevents a duplicate notification for a rung already fired.
+  if (req.method === 'POST' && req.url === '/notify/check') {
+    try {
+      checkWarningsAndNotify();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      console.error('[notify] Manual check failed:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(err) }));
+    }
     return;
   }
 

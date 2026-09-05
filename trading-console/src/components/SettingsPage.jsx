@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { hiddenAccounts } from "../lib/hiddenAccounts"
 import {
   useWarningDailyDrawdownThreshold,
@@ -64,6 +64,110 @@ function ToggleField({ id, label, value, onChange }) {
       >
         {value ? "On" : "Off"}
       </button>
+    </div>
+  )
+}
+
+// Generic labeled radio-group field -- `options` is [{ value, label }, ...].
+// Used for Alert Data Source below (its only current user); kept generic
+// rather than hardcoding market/account in case another radio-style setting
+// shows up later.
+function RadioField({ id, label, value, options, onChange, disabled }) {
+  return (
+    <div className="grid grid-cols-[200px_1fr] items-center gap-x-4 gap-y-1">
+      <span className="text-sm font-medium text-slate-600">{label}</span>
+      <div className="flex items-center gap-4">
+        {options.map((opt) => (
+          <label key={opt.value} className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-700">
+            <input
+              type="radio"
+              name={id}
+              checked={value === opt.value}
+              disabled={disabled}
+              onChange={() => onChange(opt.value)}
+            />
+            {opt.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Which data feeds the Pushover phone alerts ext-server's
+// checkWarningsAndNotify() sends (see that file's own comment) --
+// "market" (default) reads market-server's FX-priced market-positions.csv
+// (same numbers as Market View/Market Chart), "account" reads this app's
+// own scraped positions.csv (same numbers as Account View/Account Chart).
+// Deliberately NOT a localStorage setting like the warning thresholds
+// above: this has to be readable by ext-server itself (a separate Node
+// process with no access to the browser's localStorage) to actually
+// change what it alerts on, so it's persisted server-side in
+// notify-config.json via GET/POST /config/notify-settings and
+// /config/notify-data-source instead -- fetched on mount, posted on
+// change, same pattern HiddenAccountsSection below uses for its own
+// server round trips.
+function NotifyDataSourceSection() {
+  const [dataSource, setDataSource] = useState(null) // null while loading
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${SERVER_URL}/config/notify-settings`)
+      .then((res) => res.json())
+      .then((result) => {
+        if (cancelled) return
+        if (!result.ok) throw new Error(result.error || "Server rejected the request")
+        setDataSource(result.dataSource)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(`Could not load current setting (${err.message}). Is ext-server running?`)
+        setDataSource("market") // still show something selectable rather than a blank radio group
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function handleChange(next) {
+    const previous = dataSource
+    setDataSource(next) // optimistic -- matches ThresholdField/ToggleField's own immediate-feedback feel
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`${SERVER_URL}/config/notify-data-source`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataSource: next }),
+      })
+      const result = await res.json()
+      if (!result.ok) throw new Error(result.error || "Server rejected the update")
+    } catch (err) {
+      setError(`Could not save (${err.message}). Is ext-server running?`)
+      setDataSource(previous)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4">
+        <RadioField
+          id="notify-data-source"
+          label="Alert Data Source"
+          value={dataSource}
+          disabled={dataSource === null || saving}
+          onChange={handleChange}
+          options={[
+            { value: "market", label: "Market" },
+            { value: "account", label: "Account" },
+          ]}
+        />
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
     </div>
   )
 }
@@ -192,6 +296,7 @@ export default function SettingsPage() {
           />
         </div>
       </div>
+      <NotifyDataSourceSection />
       <HiddenAccountsSection hiddenAccounts={hiddenAccounts} />
     </div>
   )
