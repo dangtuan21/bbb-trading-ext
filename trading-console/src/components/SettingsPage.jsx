@@ -5,6 +5,7 @@ import {
   useWarningDrawdownThreshold,
   useWarningTargetProfitThreshold,
   useWarningTPSLEnabled,
+  useDailyDdChartScaleMax,
 } from "../lib/settings"
 
 const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
@@ -152,6 +153,7 @@ export default function SettingsPage() {
   const [warningDrawdownPct, setWarningDrawdownPct] = useWarningDrawdownThreshold()
   const [warningTargetProfitPct, setWarningTargetProfitPct] = useWarningTargetProfitThreshold()
   const [warningTPSLEnabled, setWarningTPSLEnabled] = useWarningTPSLEnabled()
+  const [dailyDdChartScaleMax, setDailyDdChartScaleMax] = useDailyDdChartScaleMax()
 
   return (
     <div className="flex flex-col gap-4">
@@ -181,6 +183,12 @@ export default function SettingsPage() {
             label="Warning TP/SL"
             value={warningTPSLEnabled}
             onChange={setWarningTPSLEnabled}
+          />
+          <ThresholdField
+            id="daily-dd-chart-scale-max"
+            label="Daily DD Chart Fallback Scale %"
+            value={dailyDdChartScaleMax}
+            onChange={setDailyDdChartScaleMax}
           />
         </div>
       </div>

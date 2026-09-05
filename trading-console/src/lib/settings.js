@@ -26,6 +26,18 @@ export const DEFAULT_WARNING_TARGET_PROFIT_PCT = 80
 const TPSL_STORAGE_KEY = "warningTPSLEnabled"
 export const DEFAULT_WARNING_TPSL_ENABLED = true
 
+// Daily DD Chart's bar-scale FALLBACK -- AccountChartPage prefers each
+// row's own actual "Max Daily DD %" (scaleMaxKey="A_MaxDailyDrawdownPct",
+// scraped per-account/platform) as the |pct| value that fills a bar to
+// 100% width, so a full-width bar means "at that account's real daily
+// loss limit". This setting only kicks in for a row missing that field
+// (blank/non-positive). Default 5% since that's the common value seen in
+// practice, but tune here if your accounts mostly run a different limit.
+// Purely a display preference (same localStorage-only persistence as the
+// warning thresholds above), not itself tied to any platform's rule.
+const DAILY_DD_CHART_SCALE_STORAGE_KEY = "dailyDdChartScaleMaxPct"
+export const DEFAULT_DAILY_DD_CHART_SCALE_MAX_PCT = 5
+
 function readStoredThreshold(storageKey, fallback) {
   const raw = localStorage.getItem(storageKey)
   const n = raw === null ? NaN : Number(raw)
@@ -111,4 +123,22 @@ export function useWarningTPSLEnabled() {
   }
 
   return [enabled, updateEnabled]
+}
+
+/**
+ * Daily DD Chart's bar-scale reference (see DAILY_DD_CHART_SCALE_STORAGE_KEY
+ * above) -- same shape/persistence as the warning thresholds, just not a
+ * warning itself.
+ */
+export function useDailyDdChartScaleMax() {
+  const [scaleMax, setScaleMax] = useState(() =>
+    readStoredThreshold(DAILY_DD_CHART_SCALE_STORAGE_KEY, DEFAULT_DAILY_DD_CHART_SCALE_MAX_PCT)
+  )
+
+  function updateScaleMax(next) {
+    setScaleMax(next)
+    localStorage.setItem(DAILY_DD_CHART_SCALE_STORAGE_KEY, String(next))
+  }
+
+  return [scaleMax, updateScaleMax]
 }

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import AccountChartPage from "./AccountChartPage"
 import PageHeader from "./PageHeader"
 import { useAccountView } from "../lib/useAccountView"
+import { useDailyDdChartScaleMax } from "../lib/settings"
 
 /**
  * AccountChartsPage: the "chart" nav item -- Daily DD Chart stacked on top
@@ -22,6 +23,7 @@ import { useAccountView } from "../lib/useAccountView"
  * own `rowCount` comment.
  */
 export default function AccountChartsPage() {
+  const [dailyDdChartScaleMax] = useDailyDdChartScaleMax()
   const { mainView, status, error, sourceFile, freshnessLabel } = useAccountView()
   const rows = mainView.joined
   // "A&B" (default) keeps only rows with a real B-side match (B_Platform
@@ -98,23 +100,17 @@ export default function AccountChartsPage() {
           </div>
 
           <section>
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Daily DD Chart</h3>
-              <span className="text-xs text-slate-400">
-                {dailyDdChartRows.length} row{dailyDdChartRows.length === 1 ? "" : "s"}
-              </span>
             </div>
-            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" />
+            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" />
           </section>
 
           <section>
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Full Chart</h3>
-              <span className="text-xs text-slate-400">
-                {chartRows.length} row{chartRows.length === 1 ? "" : "s"}
-              </span>
             </div>
-            <AccountChartPage rows={chartRows} />
+            <AccountChartPage rows={chartRows} warningKey="A_MaxDrawdownWarning" />
           </section>
         </div>
       )}

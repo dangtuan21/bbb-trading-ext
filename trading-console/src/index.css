@@ -22,3 +22,24 @@ body {
 .animate-warn-blink {
   animation: warn-blink 1s ease-in-out infinite;
 }
+
+/* Account/Market Chart bars (AccountChartPage) -- blinks a bar's own
+   opacity between full and dimmed when its row is in a warning state
+   (Daily DD Chart: A_DailyDrawdownWarning; Full Chart: A_MaxDrawdownWarning
+   -- see warningKey prop), rather than swapping to amber like
+   animate-warn-blink above: the bar's red/green color IS the meaningful
+   signal here (loss side vs. gain side), so blinking its color away would
+   fight that instead of drawing attention on top of it. */
+@keyframes chart-bar-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-chart-bar-blink {
+  animation: chart-bar-blink 1s ease-in-out infinite;
+}
