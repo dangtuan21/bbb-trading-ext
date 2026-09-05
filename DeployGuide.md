@@ -64,6 +64,42 @@ once, the first time you use it (or on a new machine).
    wrapped or cut off when pasting in step 4 -- go back and check
    `cat /root/.ssh/authorized_keys`.
 
+## Testing locally before you deploy
+
+You don't have to push straight to production to see a change. What you
+test depends on what you touched:
+
+**Frontend / dashboard changes** (`trading-console/src/**`) -- run the
+Vite dev server with hot-reload against a real data snapshot:
+```
+npm --prefix trading-console install   # first time only
+deploy/fetch-data.sh                   # pulls current positions.csv,
+                                        # market-positions.csv, market.csv
+                                        # and config.json from the droplet
+                                        # into trading-console/public/data
+cd trading-console && npm run dev
+```
+Open the URL it prints (defaults to http://localhost:5173). Edits to
+`src/` hot-reload immediately. `fetch-data.sh` is read-only on the
+droplet -- safe to re-run any time you want a fresher snapshot.
+
+**Backend changes** (`ext-server/server.js`, `market-server/server.js`)
+-- run the server locally and hit it with `curl` using a synthetic
+payload, since the real data only arrives from the browser extensions
+(which are configured to post to production, not localhost):
+```
+npm --prefix ext-server install   # first time only
+cd ext-server && node server.js
+# in another terminal:
+curl -X POST http://localhost:<port>/write -H 'Content-Type: application/json' \
+  -d '{"platform":"tastyfx","snapshot":{...},"accountId":"DTEN3","accountLabel":"Standard"}'
+```
+Check `ext-server/.env.example` for required env vars first (copy to
+`.env`, fill in real values -- `.env` is gitignored, never commit it).
+
+Neither path touches the droplet, so there's nothing to undo if a test
+run goes wrong.
+
 ## Every time you change code
 
 1. **Sync first**

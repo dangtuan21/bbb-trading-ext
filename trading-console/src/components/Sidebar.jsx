@@ -21,11 +21,18 @@ const NAV_ITEMS = [
 ]
 
 // Drawer sidebar -- collapses to a narrow icon-rail (just each item's
-// initial letter, full label on hover via title) and expands to the full
-// labeled nav on toggle. Defaults to collapsed on load; no persistence, so
-// it resets to collapsed on every page refresh.
+// initial letter) and expands to the full labeled nav on toggle. Defaults
+// to collapsed on load; no persistence, so it resets to collapsed on every
+// page refresh.
+//
+// Collapsed, each icon also gets a custom hover tooltip showing the item's
+// full name via `hoveredId` below -- richer-looking than a plain `title`
+// attribute (still kept as a fallback for accessibility/screen readers),
+// since "AV"/"AC"/"MC" etc. aren't self-explanatory on their own. Only
+// shown collapsed: expanded mode already spells the label out in full.
 export default function Sidebar({ active, onSelect }) {
   const [collapsed, setCollapsed] = useState(true)
+  const [hoveredId, setHoveredId] = useState(null)
 
   return (
     <aside
@@ -57,21 +64,32 @@ export default function Sidebar({ active, onSelect }) {
       </div>
       <nav className="flex flex-col gap-1 px-2">
         {NAV_ITEMS.map((item) => (
-          <button
+          <div
             key={item.id}
-            type="button"
-            onClick={() => onSelect(item.id)}
-            title={collapsed ? item.label : undefined}
-            className={`rounded-md py-2 text-left text-sm font-medium transition-colors ${
-              collapsed ? "flex justify-center px-0" : "px-3"
-            } ${
-              active === item.id
-                ? "bg-indigo-600 text-white"
-                : "text-slate-300 hover:bg-slate-800 hover:text-white"
-            }`}
+            className="relative"
+            onMouseEnter={() => setHoveredId(item.id)}
+            onMouseLeave={() => setHoveredId((h) => (h === item.id ? null : h))}
           >
-            {collapsed ? item.short ?? item.label.charAt(0) : item.label}
-          </button>
+            <button
+              type="button"
+              onClick={() => onSelect(item.id)}
+              title={collapsed ? item.label : undefined}
+              className={`w-full rounded-md py-2 text-left text-sm font-medium transition-colors ${
+                collapsed ? "flex justify-center px-0" : "px-3"
+              } ${
+                active === item.id
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              {collapsed ? item.short ?? item.label.charAt(0) : item.label}
+            </button>
+            {collapsed && hoveredId === item.id && (
+              <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 whitespace-nowrap rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white shadow-lg -translate-y-1/2">
+                {item.label}
+              </div>
+            )}
+          </div>
         ))}
       </nav>
     </aside>
