@@ -237,35 +237,47 @@ function fnParseAccounts(tabLabel) {
   const text = container.innerText || container.textContent || '';
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
 
+  // Confirmed live (2026-09-07) that RF Client Zone renders a small
+  // phase-progress badge (a bare "1"/"2"/etc, matching the same phase
+  // number the real Phase column shows a few lines later, e.g. badge "2"
+  // alongside Phase "2/2") right next to an account's name for any
+  // account past phase 1 -- and that this extra line breaks a fixed
+  // 5-line-per-account stride: a badge account either went missing
+  // entirely, or was mis-recorded with the badge digit AS the account id
+  // ("2" instead of "RF-880-46585") and every field after it shifted.
+  // Anchor on the Status line instead -- one of a small closed set of
+  // known values, so it's a reliable anchor regardless of exactly how
+  // many extra lines a given account's card renders -- and walk back
+  // from there for the real account name, skipping over a bare 1-2-digit
+  // line (the badge; a real account id is always either "RF-xxx-xxxxx"
+  // or an 11-14 digit string, never a bare 1-2-digit number).
+  const BADGE_RE = /^\d{1,2}$/;
+
   const accounts = [];
-  let i = 0;
   let tabIndex = 0;
-  while (i < lines.length) {
-    if (lines[i] === 'Details') {
-      i += 1;
-      continue;
+  for (let j = 0; j < lines.length; j++) {
+    if (!ACCOUNT_STATUS_VALUES.includes(lines[j])) continue;
+    if (j + 3 >= lines.length) continue;
+    let nameIdx = j - 1;
+    if (nameIdx < 0 || lines[nameIdx] === 'Details') continue;
+    if (BADGE_RE.test(lines[nameIdx]) && nameIdx - 1 >= 0 && lines[nameIdx - 1] !== 'Details') {
+      nameIdx -= 1;
     }
-    if (i + 4 < lines.length && ACCOUNT_STATUS_VALUES.includes(lines[i + 1])) {
-      accounts.push({
-        account: lines[i],
-        status: lines[i + 1],
-        program: lines[i + 2],
-        balance: lines[i + 3],
-        // On the Funded tab this 5th line isn't a real "phase 1/2" the way
-        // Challenge cards have -- a funded account has already cleared every
-        // phase, so it's not something worth reading off the page at all.
-        // Report it as the fixed label "Fund" instead of whatever text
-        // happens to sit there.
-        phase: tabLabel === 'Funded' ? 'Fund' : lines[i + 4],
-        tab: tabLabel,
-        tabIndex,
-      });
-      tabIndex += 1;
-      i += 5;
-      if (i < lines.length && lines[i] === 'Details') i += 1;
-    } else {
-      i += 1;
-    }
+    accounts.push({
+      account: lines[nameIdx],
+      status: lines[j],
+      program: lines[j + 1],
+      balance: lines[j + 2],
+      // On the Funded tab this line isn't a real "phase 1/2" the way
+      // Challenge cards have -- a funded account has already cleared every
+      // phase, so it's not something worth reading off the page at all.
+      // Report it as the fixed label "Fund" instead of whatever text
+      // happens to sit there.
+      phase: tabLabel === 'Funded' ? 'Fund' : lines[j + 3],
+      tab: tabLabel,
+      tabIndex,
+    });
+    tabIndex += 1;
   }
   return accounts;
 }
