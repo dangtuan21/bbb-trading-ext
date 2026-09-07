@@ -67,7 +67,7 @@ import { formatPct } from "../lib/compute"
  * read off the two ends of the chart nearest the green/red boundary, not
  * one single top-to-bottom ranking across both colors.
  */
-export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey }) {
+export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, noSlKey }) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">
@@ -136,6 +136,18 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // added attention cue, not a replacement for it.
           const isWarning = warningKey ? Boolean(row[warningKey]) : false
           const barBlinkClass = isWarning ? " animate-chart-bar-blink" : ""
+          // `noSlKey` reads the row's TP/SL label field (A_TPSL: "TP/SL",
+          // "TP", "SL", or "" -- see compute.js's tpSlLabel) to tell whether
+          // a Stop Loss is set. Only used by the Daily DD Chart
+          // (noSlKey="A_TPSL", warningKey="A_DailyDrawdownWarning") to
+          // swap the bar's Symbol label for "No SL!" once BOTH conditions
+          // hold: already over the Warning Daily Drawdown % threshold
+          // (isWarning, already blinking the bar -- see barBlinkClass
+          // above) AND no Stop Loss protecting the position. Without
+          // noSlKey (Full Chart's usage), hasStopLoss stays true and
+          // showNoSl stays false, so nothing changes there.
+          const hasStopLoss = noSlKey ? row[noSlKey] === "SL" || row[noSlKey] === "TP/SL" : true
+          const showNoSl = isWarning && Boolean(noSlKey) && !hasStopLoss
 
           return (
             <div key={`${row.A_Platform}|${row.A_AccountID}`} className="flex h-9 items-stretch">
@@ -147,7 +159,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                       style={{ width: `${widthPct}%` }}
                       className={`flex h-6 min-w-8 items-center justify-end rounded-l bg-red-600 px-2${barBlinkClass}`}
                     >
-                      <span className="truncate text-xs font-medium text-white">{label}</span>
+                      <span className="truncate text-xs font-bold text-white">{showNoSl ? "No SL!" : label}</span>
                     </div>
                   </>
                 ) : (
@@ -168,7 +180,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                         style={{ width: `${widthPct}%` }}
                         className={`flex h-6 min-w-8 items-center rounded-r ${positiveColorClass} px-2${barBlinkClass}`}
                       >
-                        <span className="truncate text-xs font-medium text-white">{label}</span>
+                        <span className="truncate text-xs font-bold text-white">{showNoSl ? "No SL!" : label}</span>
                       </div>
                       <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
                     </>

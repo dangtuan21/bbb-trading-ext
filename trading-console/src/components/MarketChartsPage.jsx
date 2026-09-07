@@ -129,7 +129,7 @@ export default function MarketChartsPage() {
             <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Daily DD Chart</h3>
             </div>
-            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" />
+            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" noSlKey="A_TPSL" />
           </section>
 
           <section>
