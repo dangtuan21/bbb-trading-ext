@@ -22,7 +22,7 @@ import AccountLogPage from "./components/AccountLogPage"
  * being edited.
  */
 export default function App() {
-  const [active, setActive] = useState("mainview")
+  const [active, setActive] = useState("chart")
   const [editingRow, setEditingRow] = useState(null)
 
   return (
