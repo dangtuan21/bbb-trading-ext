@@ -37,7 +37,17 @@ function cleanRow(row) {
 }
 
 async function loadMarketPositions() {
-  const res = await fetch(MARKET_POSITIONS_URL)
+  // cache: 'no-store' -- confirmed live (2026-09-09) that a plain fetch()
+  // here can be served straight from the browser's own HTTP cache on a
+  // page reload (Caddy's file_server sets Last-Modified but no explicit
+  // Cache-Control, so a browser is free to reuse a prior response via
+  // heuristic freshness): Market Chart showed "1m ago" right after a
+  // successful Refresh (that value comes from the POST /fetch response
+  // body, not this GET, so it was never wrong), then reverted to a much
+  // older "1h ago" on reload even though market-server had written a
+  // fresh file server-side moments earlier -- this GET was quietly
+  // reusing a stale cached response instead of asking the server.
+  const res = await fetch(MARKET_POSITIONS_URL, { cache: 'no-store' })
   if (!res.ok) {
     // Missing file -- market-server hasn't been triggered yet (fresh
     // checkout, or nobody's clicked Refresh since) -- is a normal state,

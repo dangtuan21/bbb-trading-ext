@@ -15,7 +15,11 @@ function cleanRow(row) {
 }
 
 async function loadPositions() {
-  const res = await fetch(POSITIONS_URL)
+  // cache: 'no-store' -- same fix as useMarketPositions.js's loadMarketPositions
+  // (see its comment): without this, a browser can serve this GET from its
+  // own HTTP cache on reload instead of asking the server, showing a stale
+  // freshness label even though positions.csv was written more recently.
+  const res = await fetch(POSITIONS_URL, { cache: 'no-store' })
   if (!res.ok) {
     // Missing file (e.g. no extension has written yet) is a normal state,
     // not an error -- it just means 0 rows rather than blocking the page.
