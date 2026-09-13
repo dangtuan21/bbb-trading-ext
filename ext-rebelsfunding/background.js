@@ -340,6 +340,69 @@ function fnScrapeBalanceEquity(expectedAccountId) {
   };
 }
 
+// "Show Detailed Statistics" is a collapsed accordion further down this
+// same RF Client Zone account Details page (Consistency Score > Basic
+// Metrics: Total Trades / Win Rate / Profit Factor / Avg RR Ratio) --
+// identified from screenshots of this page, not yet run live. Collapsed by
+// default, so its content isn't reliably present/visible until this is
+// clicked; the caller waits for "Total Trades" text afterward rather than
+// assuming a fixed delay, same pattern as every other in-app expand/tab
+// switch in this file. Uses the same dispatch-real-mouse-events click as
+// fnClickTab's simulateClick, since native el.click() has already been
+// shown (see fnClickTab's own comment) to silently no-op on this app's
+// component stack.
+function fnClickShowDetailedStatistics() {
+  function simulateClick(el) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      const Ctor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+      el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }
+  }
+  const bodyText = document.body.innerText || document.body.textContent || '';
+  // Confirmed live (2026-09-12) the on-page label is "TOTAL TRADES" (all
+  // caps), not title case -- match case-insensitively so this bail-out can
+  // actually fire.
+  if (bodyText.toUpperCase().includes('TOTAL TRADES')) return { clicked: false, alreadyOpen: true };
+
+  const TARGET = 'Show Detailed Statistics';
+  const all = document.querySelectorAll('body *');
+  for (const el of all) {
+    if (el.children.length === 0 && el.textContent.trim() === TARGET) {
+      simulateClick(el);
+      return { clicked: true, alreadyOpen: false, via: 'exact-leaf' };
+    }
+  }
+  for (const el of all) {
+    if (el.children.length <= 1 && el.textContent.trim().includes(TARGET)) {
+      simulateClick(el);
+      return { clicked: true, alreadyOpen: false, via: 'fallback' };
+    }
+  }
+  return { clicked: false, alreadyOpen: false };
+}
+
+// Reads Total Trades off the now-expanded "Basic Metrics" card. Deliberately
+// ignores "Unique Trades" -- a different figure shown higher up on the
+// Basic challenge statistics card -- per Tuan, only Total Trades is wanted
+// here. Same tolerant "label line, value on the next line" read as
+// fnScrapeContestStats, plus a debug context dump (same convention as
+// maxDdContext/profitTargetContext there) so a wording/layout change can be
+// read off directly instead of guessed blind.
+function fnScrapeTotalTrades() {
+  const text = document.body.innerText || document.body.textContent || '';
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const idx = lines.findIndex((l) => l.toUpperCase() === 'TOTAL TRADES');
+  const raw = idx >= 0 && idx + 1 < lines.length ? lines[idx + 1] : '';
+  const m = /-?\d+/.exec(raw);
+  return {
+    totalTrades: m ? m[0] : '',
+    context: idx < 0 ? lines.slice(0, 24) : null,
+  };
+}
+
 // RF-Trader (a separate origin/SSO deep-link from RF Client Zone) always
 // shows the account ID in its own header -- e.g. "22026427572022
 // Silver-10,000 phase1", confirmed live via a real screenshot. Mirrors
@@ -869,6 +932,44 @@ async function scrapeAccount(scanTabId, acc) {
   const balance = money(details?.balance || acc.balance);
   let equity = money(details?.equity || '');
 
+  // Total Trades (Show Detailed Statistics > Consistency Score > Basic
+  // Metrics) lives on this same Details page, no RF-Trader needed -- read
+  // it here, right after Balance/Equity, while still on this account's
+  // Details view. Re-expanded every time: this page is freshly navigated
+  // to per account/per scan (see REBELSFUNDING_URL reload above), so the
+  // accordion is never left open from a previous account.
+  let totalTrades = '';
+  let totalTradesDiag = null;
+  let detailedStatsToggle = await execInTab(scanTabId, fnClickShowDetailedStatistics).catch(() => null);
+  // Confirmed live (2026-09-13) via a real scan's diagnostics: account
+  // 42026425387055 -- known, from manual testing the same week, to have
+  // this section available -- still came back with the toggle never found
+  // (clicked:false, alreadyOpen:false), even though Balance/Equity above it
+  // had already rendered by then. The Consistency Score card carries
+  // heavier computed metrics (Sharpe ratio, win/loss concentration, etc.)
+  // than a plain balance figure, so it likely mounts on a slower/separate
+  // path -- retry the click a couple of times with a short wait between,
+  // same shape as the frame-detection retry in scrapeRfTraderPositions,
+  // before concluding the section genuinely isn't there (most accounts,
+  // gated behind some unique-trades minimum, legitimately won't have it).
+  for (let attempt = 0; attempt < 2 && !detailedStatsToggle?.clicked && !detailedStatsToggle?.alreadyOpen; attempt++) {
+    await sleep(1500);
+    detailedStatsToggle = await execInTab(scanTabId, fnClickShowDetailedStatistics).catch(() => null);
+  }
+  if (detailedStatsToggle?.clicked) {
+    // waitForTextInTab does an exact, case-sensitive substring check --
+    // the real label is "TOTAL TRADES" (all caps), confirmed live
+    // 2026-09-12, not the title-case guess this originally waited for
+    // (which meant this always timed out and never actually gated anything).
+    await waitForTextInTab(scanTabId, 'TOTAL TRADES', 8000);
+  }
+  const consistencyStats = await execInTab(scanTabId, fnScrapeTotalTrades).catch(() => null);
+  if (consistencyStats?.totalTrades) {
+    totalTrades = consistencyStats.totalTrades;
+  } else {
+    totalTradesDiag = { reason: 'total-trades-not-found', detailedStatsToggle, context: consistencyStats?.context };
+  }
+
   let positions = [];
   let accountPL = '';
   let initialBalance = '';
@@ -957,6 +1058,7 @@ async function scrapeAccount(scanTabId, acc) {
     Equity: equity,
     AccountPL: accountPL,
     InitialBalance: initialBalance,
+    TotalTrades: totalTrades,
     StartingEquity: startingEquity,
     MaxDailyDrawdown: maxDailyDrawdown,
     MaxDailyDrawdownPct: maxDailyDrawdownPct,
@@ -968,6 +1070,8 @@ async function scrapeAccount(scanTabId, acc) {
     CurrentValuePct: currentValuePct,
     ProfitTarget: profitTarget,
   };
+
+  if (totalTradesDiag) diag = diag ? { ...diag, totalTradesDiag } : { totalTradesDiag };
 
   if (!positions.length) {
     return {
@@ -1001,7 +1105,7 @@ function _blankRowForAccount(acc) {
   return {
     SnapshotDate: fmtDate(new Date()), Platform: 'RebelsFunding', AccountID: acc.account,
     AccountLabel: acc.program, Phase: acc.phase || '', IsRealMoney: '', Balance: '', Equity: '', AccountPL: '',
-    InitialBalance: '', StartingEquity: '', MaxDailyDrawdown: '', MaxDailyDrawdownPct: '',
+    InitialBalance: '', TotalTrades: '', StartingEquity: '', MaxDailyDrawdown: '', MaxDailyDrawdownPct: '',
     TodayDrawdown: '', TodayDrawdownPct: '',
     MaxDrawdownAmount: '', MaxDrawdownPct: '', CurrentValueAmount: '', CurrentValuePct: '',
     PosID: '', Symbol: '', Direction: '', Size: '', SizeUnit: '', Opening: '', Latest: '',

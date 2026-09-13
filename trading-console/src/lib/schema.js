@@ -8,6 +8,7 @@ export const POSITIONLOG_FIELDS = [
   "AccountID",
   "AccountLabel",
   "Phase",
+  "TotalTrades",
   "Balance",
   "Equity",
   "AccountPL",
@@ -68,6 +69,7 @@ export const MONEY_FIELDS = new Set([
 // Non-money but still numeric columns -- right-aligned like money columns,
 // but shown as-is (no formatMoney, no red-on-negative).
 export const NUMERIC_FIELDS = new Set([
+  "TotalTrades",
   "Size",
   "TotalSize",
   "Opening",

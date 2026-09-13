@@ -89,7 +89,7 @@ const IN_SCOPE_PLATFORMS = new Set(['RebelsFunding', 'FTMO', 'tastyfx']);
 // needs to stay format-identical for trading-console's computeMainView()
 // reuse to keep working.
 const MARKET_POSITIONS_HEADER = [
-  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'Phase', 'IsRealMoney',
+  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'Phase', 'TotalTrades', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
   'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'MaxDailyDrawdownPct',
   'TodayDrawdown', 'TodayDrawdownPct',

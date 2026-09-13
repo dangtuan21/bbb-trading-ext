@@ -162,7 +162,7 @@ function fmt2(n) {
 // "2") comes straight off the RF Client Zone accounts list -- see
 // ext-rebelsfunding/background.js's fnParseAccounts/scrapeAccount.
 const HEADER = [
-  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'Phase', 'IsRealMoney',
+  'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'Phase', 'TotalTrades', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
   'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'MaxDailyDrawdownPct',
   'TodayDrawdown', 'TodayDrawdownPct',

@@ -113,6 +113,7 @@ export function computeMainView(
         AccountID: row.AccountID,
         AccountLabel: row.AccountLabel,
         Phase: row.Phase,
+        TotalTrades: row.TotalTrades,
         Balance: row.Balance,
         Equity: row.Equity,
         AccountPL: row.AccountPL,
@@ -167,6 +168,7 @@ export function computeMainView(
     AccountID: g.AccountID,
     AccountLabel: g.AccountLabel,
     Phase: g.Phase,
+    TotalTrades: g.TotalTrades,
     Balance: g.Balance,
     Equity: g.Equity,
     AccountPL: g.AccountPL,
@@ -353,6 +355,7 @@ export function computeMainView(
       // ext-rebelsfunding/background.js) -- blank for FTMO/AlphaCapital,
       // which have no equivalent multi-phase-challenge concept scraped.
       A_Phase: l.Phase || "",
+      A_TotalTrades: l.TotalTrades || "",
       A_AccountLabel: l.AccountLabel,
       A_Balance: l.Balance,
       A_Equity: l.Equity,

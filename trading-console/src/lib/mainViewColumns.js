@@ -86,6 +86,12 @@ export const MAINVIEW_COLUMNS = [
   // list -- see Phase in ext-rebelsfunding/background.js); blank for
   // FTMO/AlphaCapital rows.
   { key: "A_Phase", label: "A Phase" },
+  // Total number of trades the account has made -- from RF Client Zone's
+  // "Show Detailed Statistics > Consistency Score > Basic Metrics" card
+  // (RebelsFunding-only, same as A_Phase; see fnScrapeTotalTrades in
+  // ext-rebelsfunding/background.js). Blank for FTMO/AlphaCapital/tastyfx
+  // rows and for RebelsFunding accounts that haven't unlocked that card yet.
+  { key: "A_TotalTrades", label: "A Trades", numeric: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Dir" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
