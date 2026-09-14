@@ -1,4 +1,19 @@
 import { formatPct } from "../lib/compute"
+import { useMinTrades } from "../lib/settings"
+
+// A_Platform holds the raw platform name (matches ext-server's CSV
+// "Platform" field -- see compute.js), but the Min Trades setting (see
+// lib/settings.js's useMinTrades / SettingsPage's Min Trades section) is
+// keyed by the same short RF/FTMO/AC abbreviations mainViewColumns.js
+// already displays "A Plat" as. Maps one to the other; platforms with no
+// Min Trades entry (tastyfx, OANDA, forex.com) return null so the chart
+// label below just falls back to the plain last-4-digits account number.
+function minTradesKeyForPlatform(platform) {
+  if (platform === "RebelsFunding") return "RF"
+  if (platform === "FTMO") return "FTMO"
+  if (platform === "AlphaCapital") return "AC"
+  return null
+}
 
 /**
  * AccountChartPage: one horizontal bar per Account View row that currently
@@ -68,6 +83,7 @@ import { formatPct } from "../lib/compute"
  * one single top-to-bottom ranking across both colors.
  */
 export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, noSlKey }) {
+  const [minTrades] = useMinTrades()
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">
@@ -125,6 +141,19 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // harmless to compute.
           const widthPct = Math.min(Math.max((Math.abs(pct) / rowScaleMax) * 100, 2), 100)
           const last4 = row.A_AccountID ? String(row.A_AccountID).slice(-4) : ""
+          // e.g. "6781 (4/6)" -- current trades (A_TotalTrades, blank
+          // shown as 0) over that platform's Min Trades setting. Only
+          // platforms Min Trades actually covers (RF/FTMO/AC) get the
+          // "(x/y)" suffix, and only when that platform's Min Trades is
+          // actually set above 0 -- a 0 (FTMO/AlphaCapital's default,
+          // meaning "not tracked for this platform yet") means there's
+          // nothing meaningful to divide by, so it's the same as not
+          // covering that platform at all: plain last4.
+          const minTradesPlatformKey = minTradesKeyForPlatform(row.A_Platform)
+          const minTradesValue = minTradesPlatformKey ? minTrades[minTradesPlatformKey] : 0
+          const last4Label = last4 && minTradesValue > 0
+            ? last4 + " (" + (row.A_TotalTrades || 0) + "/" + minTradesValue + ")"
+            : last4
           const label = row.A_Symbol
           const pctLabel = formatPct(row[pctKey])
           // `warningKey` reads an already-computed boolean warning flag off
@@ -163,7 +192,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     </div>
                   </>
                 ) : (
-                  last4 && <span className="shrink-0 pr-2 text-xs font-medium text-slate-400">{last4}</span>
+                  last4 && <span className="shrink-0 pr-2 text-xs font-medium text-slate-400">{last4Label}</span>
                 )}
               </div>
               <div className="w-px shrink-0 self-stretch bg-slate-300" />
@@ -186,7 +215,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     </>
                   )
                 ) : (
-                  last4 && <span className="shrink-0 pl-2 text-xs font-medium text-slate-400">{last4}</span>
+                  last4 && <span className="shrink-0 pl-2 text-xs font-medium text-slate-400">{last4Label}</span>
                 )}
               </div>
             </div>
