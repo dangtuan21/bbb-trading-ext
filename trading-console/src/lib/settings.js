@@ -142,3 +142,42 @@ export function useDailyDdChartScaleMax() {
 
   return [scaleMax, updateScaleMax]
 }
+
+// "Min Trades" per platform -- RebelsFunding/FTMO/AlphaCapital each get
+// their own minimum-trades value. Per Tuan (2026-09-14): just stored here
+// for now, nothing reads it yet (no warning/highlight wired to it). Kept
+// as one JSON object under a single storage key rather than three
+// separate keys like the settings above, since RF/FTMO/AC are naturally a
+// group read and written together.
+const MIN_TRADES_STORAGE_KEY = "minTradesByPlatform"
+export const DEFAULT_MIN_TRADES = { RF: 6, FTMO: 0, AC: 0 }
+
+function readStoredMinTrades() {
+  const raw = localStorage.getItem(MIN_TRADES_STORAGE_KEY)
+  if (!raw) return DEFAULT_MIN_TRADES
+  try {
+    const parsed = JSON.parse(raw)
+    return { ...DEFAULT_MIN_TRADES, ...parsed }
+  } catch {
+    return DEFAULT_MIN_TRADES
+  }
+}
+
+/**
+ * Min Trades per platform (RF/FTMO/AC) -- see MIN_TRADES_STORAGE_KEY above.
+ * Same localStorage-only persistence as the warning thresholds; returns the
+ * full {RF, FTMO, AC} object plus a setter that updates one platform at a
+ * time (`updatePlatform("RF", 6)`) rather than requiring the whole object
+ * back, matching how SettingsPage's per-platform fields call it.
+ */
+export function useMinTrades() {
+  const [minTrades, setMinTrades] = useState(readStoredMinTrades)
+
+  function updatePlatform(platform, value) {
+    const next = { ...minTrades, [platform]: value }
+    setMinTrades(next)
+    localStorage.setItem(MIN_TRADES_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  return [minTrades, updatePlatform]
+}

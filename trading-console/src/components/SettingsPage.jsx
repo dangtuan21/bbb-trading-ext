@@ -6,6 +6,7 @@ import {
   useWarningTargetProfitThreshold,
   useWarningTPSLEnabled,
   useDailyDdChartScaleMax,
+  useMinTrades,
 } from "../lib/settings"
 
 const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
@@ -42,6 +43,41 @@ function ThresholdField({ id, label, value, onChange }) {
         />
         <span className="text-sm text-slate-500">%</span>
       </div>
+    </div>
+  )
+}
+
+// Same shape as ThresholdField, but for a plain non-negative integer count
+// (no upper bound, no "%" suffix) -- used by Min Trades below, which isn't
+// a percentage threshold like the fields ThresholdField serves.
+function CountField({ id, label, value, onChange }) {
+  const [text, setText] = useState(String(value))
+
+  function commit(raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0 && Number.isInteger(n)) {
+      onChange(n)
+      setText(String(n))
+    } else {
+      setText(String(value))
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-[200px_1fr] items-center gap-x-4 gap-y-1">
+      <label htmlFor={id} className="text-sm font-medium text-slate-600">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="number"
+        min="0"
+        step="1"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-right text-sm"
+      />
     </div>
   )
 }
@@ -172,6 +208,39 @@ function NotifyDataSourceSection() {
   )
 }
 
+// Min Trades per platform (RF/FTMO/AC) -- see lib/settings.js's
+// useMinTrades for the storage shape/defaults. Per Tuan (2026-09-14): just
+// stored here for now, no warning/highlight behavior wired to it yet.
+function MinTradesSection() {
+  const [minTrades, setMinTradesPlatform] = useMinTrades()
+
+  return (
+    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold text-slate-700">Min Trades</h3>
+      <div className="flex flex-col gap-4">
+        <CountField
+          id="min-trades-rf"
+          label="RebelsFunding"
+          value={minTrades.RF}
+          onChange={(n) => setMinTradesPlatform("RF", n)}
+        />
+        <CountField
+          id="min-trades-ftmo"
+          label="FTMO"
+          value={minTrades.FTMO}
+          onChange={(n) => setMinTradesPlatform("FTMO", n)}
+        />
+        <CountField
+          id="min-trades-ac"
+          label="AlphaCapital"
+          value={minTrades.AC}
+          onChange={(n) => setMinTradesPlatform("AC", n)}
+        />
+      </div>
+    </div>
+  )
+}
+
 // Lists every account hidden via RuleEditForm's "Hide Account" button (see
 // lib/hiddenAccounts.js) with an "Unhide" button per row -- the only place
 // to reverse a hide, since a hidden row has no MainView link to reopen the
@@ -296,6 +365,7 @@ export default function SettingsPage() {
           />
         </div>
       </div>
+      <MinTradesSection />
       <NotifyDataSourceSection />
       <HiddenAccountsSection hiddenAccounts={hiddenAccounts} />
     </div>
