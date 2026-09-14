@@ -340,18 +340,24 @@ function fnScrapeBalanceEquity(expectedAccountId) {
   };
 }
 
-// "Show Detailed Statistics" is a collapsed accordion further down this
-// same RF Client Zone account Details page (Consistency Score > Basic
-// Metrics: Total Trades / Win Rate / Profit Factor / Avg RR Ratio) --
-// identified from screenshots of this page, not yet run live. Collapsed by
-// default, so its content isn't reliably present/visible until this is
-// clicked; the caller waits for "Total Trades" text afterward rather than
-// assuming a fixed delay, same pattern as every other in-app expand/tab
-// switch in this file. Uses the same dispatch-real-mouse-events click as
-// fnClickTab's simulateClick, since native el.click() has already been
-// shown (see fnClickTab's own comment) to silently no-op on this app's
-// component stack.
-function fnClickShowDetailedStatistics() {
+// Total Trades used to be read off RF Client Zone's "Show Detailed
+// Statistics" accordion (Consistency Score > Basic Metrics). Dropped per
+// Tuan (2026-09-14): that card is gated behind a minimum-trades threshold
+// ("Make N more trades to unlock your consistency score", confirmed live
+// on RF-412-47507) and simply never renders for low-activity accounts.
+//
+// Replaced with the "Statistics" card that sits on this SAME RF Client
+// Zone account Details page (right below Balance/Equity/Free
+// Margin/Used Margin, above "Basic challenge statistics") -- confirmed
+// live via screenshot: a card labeled "Statistics" / "View detailed
+// charts, trade history and performance metrics" with an arrow, which
+// routes (in-app, same tab) to a "Charts" page carrying Profit Factor,
+// Positions Count, Win/Loss trades etc. Positions Count has no
+// minimum-trades gate (RF-412-47507 shows Positions Count: 4 there despite
+// "Unique Trades 3/6" and the still-locked consistency score on the page
+// it came from) -- it's used as Total Trades instead. This is still RF
+// Client Zone (scanTabId), not RF-Trader -- no login/new tab needed.
+function fnClickStatisticsCard() {
   function simulateClick(el) {
     const rect = el.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
@@ -361,46 +367,39 @@ function fnClickShowDetailedStatistics() {
       el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
     }
   }
-  const bodyText = document.body.innerText || document.body.textContent || '';
-  // Confirmed live (2026-09-12) the on-page label is "TOTAL TRADES" (all
-  // caps), not title case -- match case-insensitively so this bail-out can
-  // actually fire.
-  if (bodyText.toUpperCase().includes('TOTAL TRADES')) return { clicked: false, alreadyOpen: true };
-
-  const TARGET = 'Show Detailed Statistics';
+  const TARGET = 'Statistics';
   const all = document.querySelectorAll('body *');
   for (const el of all) {
     if (el.children.length === 0 && el.textContent.trim() === TARGET) {
       simulateClick(el);
-      return { clicked: true, alreadyOpen: false, via: 'exact-leaf' };
+      return { clicked: true, via: 'exact-leaf' };
     }
   }
-  for (const el of all) {
-    if (el.children.length <= 1 && el.textContent.trim().includes(TARGET)) {
-      simulateClick(el);
-      return { clicked: true, alreadyOpen: false, via: 'fallback' };
-    }
-  }
-  return { clicked: false, alreadyOpen: false };
+  return { clicked: false };
 }
 
-// Reads Total Trades off the now-expanded "Basic Metrics" card. Deliberately
-// ignores "Unique Trades" -- a different figure shown higher up on the
-// Basic challenge statistics card -- per Tuan, only Total Trades is wanted
-// here. Same tolerant "label line, value on the next line" read as
-// fnScrapeContestStats, plus a debug context dump (same convention as
-// maxDdContext/profitTargetContext there) so a wording/layout change can be
-// read off directly instead of guessed blind.
-function fnScrapeTotalTrades() {
+// Reads "Positions Count" off the Charts page fnClickStatisticsCard routes
+// to. Same tolerant "label line, value on the next line" read as
+// fnScrapeContestStats, plus a debug context dump so a wording/layout
+// change can be read off directly instead of guessed blind.
+function fnScrapePositionsCount() {
   const text = document.body.innerText || document.body.textContent || '';
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const idx = lines.findIndex((l) => l.toUpperCase() === 'TOTAL TRADES');
+  const idx = lines.findIndex((l) => l.toUpperCase() === 'POSITIONS COUNT');
   const raw = idx >= 0 && idx + 1 < lines.length ? lines[idx + 1] : '';
   const m = /-?\d+/.exec(raw);
   return {
-    totalTrades: m ? m[0] : '',
+    positionsCount: m ? m[0] : '',
     context: idx < 0 ? lines.slice(0, 24) : null,
   };
+}
+
+// Navigates back off the Charts page (an in-app route push, not a full
+// page load) so scrapeAccount can resume on the account Details page it
+// was already on -- same page fnClickRFTraderLogin needs next.
+function fnGoBack() {
+  window.history.back();
+  return true;
 }
 
 // RF-Trader (a separate origin/SSO deep-link from RF Client Zone) always
@@ -932,42 +931,31 @@ async function scrapeAccount(scanTabId, acc) {
   const balance = money(details?.balance || acc.balance);
   let equity = money(details?.equity || '');
 
-  // Total Trades (Show Detailed Statistics > Consistency Score > Basic
-  // Metrics) lives on this same Details page, no RF-Trader needed -- read
-  // it here, right after Balance/Equity, while still on this account's
-  // Details view. Re-expanded every time: this page is freshly navigated
-  // to per account/per scan (see REBELSFUNDING_URL reload above), so the
-  // accordion is never left open from a previous account.
+  // Total Trades (Positions Count) lives on this same Details page's
+  // "Statistics" card -- click it, read Positions Count off the Charts
+  // page it routes to, then navigate back so the rest of this function
+  // (RF-Trader Login click, etc.) resumes on the Details page as before.
+  // See fnClickStatisticsCard's comment for why this replaced the old
+  // "Show Detailed Statistics" accordion.
   let totalTrades = '';
   let totalTradesDiag = null;
-  let detailedStatsToggle = await execInTab(scanTabId, fnClickShowDetailedStatistics).catch(() => null);
-  // Confirmed live (2026-09-13) via a real scan's diagnostics: account
-  // 42026425387055 -- known, from manual testing the same week, to have
-  // this section available -- still came back with the toggle never found
-  // (clicked:false, alreadyOpen:false), even though Balance/Equity above it
-  // had already rendered by then. The Consistency Score card carries
-  // heavier computed metrics (Sharpe ratio, win/loss concentration, etc.)
-  // than a plain balance figure, so it likely mounts on a slower/separate
-  // path -- retry the click a couple of times with a short wait between,
-  // same shape as the frame-detection retry in scrapeRfTraderPositions,
-  // before concluding the section genuinely isn't there (most accounts,
-  // gated behind some unique-trades minimum, legitimately won't have it).
-  for (let attempt = 0; attempt < 2 && !detailedStatsToggle?.clicked && !detailedStatsToggle?.alreadyOpen; attempt++) {
-    await sleep(1500);
-    detailedStatsToggle = await execInTab(scanTabId, fnClickShowDetailedStatistics).catch(() => null);
-  }
-  if (detailedStatsToggle?.clicked) {
-    // waitForTextInTab does an exact, case-sensitive substring check --
-    // the real label is "TOTAL TRADES" (all caps), confirmed live
-    // 2026-09-12, not the title-case guess this originally waited for
-    // (which meant this always timed out and never actually gated anything).
-    await waitForTextInTab(scanTabId, 'TOTAL TRADES', 8000);
-  }
-  const consistencyStats = await execInTab(scanTabId, fnScrapeTotalTrades).catch(() => null);
-  if (consistencyStats?.totalTrades) {
-    totalTrades = consistencyStats.totalTrades;
+  const statsCardClickResult = await execInTab(scanTabId, fnClickStatisticsCard).catch(() => null);
+  if (statsCardClickResult?.clicked) {
+    await waitForTextInTab(scanTabId, 'Profit balance', 8000);
+    let positionsCountResult = await execInTab(scanTabId, fnScrapePositionsCount).catch(() => null);
+    for (let attempt = 0; attempt < 2 && !positionsCountResult?.positionsCount; attempt++) {
+      await sleep(1500);
+      positionsCountResult = await execInTab(scanTabId, fnScrapePositionsCount).catch(() => null);
+    }
+    if (positionsCountResult?.positionsCount) {
+      totalTrades = positionsCountResult.positionsCount;
+    } else {
+      totalTradesDiag = { reason: 'positions-count-not-found', context: positionsCountResult?.context };
+    }
+    await execInTab(scanTabId, fnGoBack).catch(() => {});
+    await waitForTextInTab(scanTabId, 'Balance', 8000);
   } else {
-    totalTradesDiag = { reason: 'total-trades-not-found', detailedStatsToggle, context: consistencyStats?.context };
+    totalTradesDiag = { reason: 'statistics-card-not-found' };
   }
 
   let positions = [];
