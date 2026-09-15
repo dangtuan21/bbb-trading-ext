@@ -82,7 +82,7 @@ function minTradesKeyForPlatform(platform) {
  * read off the two ends of the chart nearest the green/red boundary, not
  * one single top-to-bottom ranking across both colors.
  */
-export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, warningLabel = "DD", extraWarningKey, extraWarningLabel = "Weekend", noSlKey }) {
+export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, warningLabel = "dd", extraWarningKey, extraWarningLabel = "weekend", noSlKey }) {
   const [minTrades] = useMinTrades()
   if (!rows.length) {
     return (
@@ -190,9 +190,6 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // "Max DD"/"Daily DD" and "Weekend" respectively), since this
           // component only knows the boolean, not what it represents.
           const reasonLabel = [warningActive && warningLabel, extraWarningActive && extraWarningLabel].filter(Boolean).join(" + ")
-          const reasonBadge = isWarning && reasonLabel ? (
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-600">{reasonLabel}</span>
-          ) : null
           // `noSlKey` reads the row's TP/SL label field (A_TPSL: "TP/SL",
           // "TP", "SL", or "" -- see compute.js's tpSlLabel) to tell whether
           // a Stop Loss is set. Only used by the Daily DD Chart
@@ -205,19 +202,25 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // showNoSl stays false, so nothing changes there.
           const hasStopLoss = noSlKey ? row[noSlKey] === "SL" || row[noSlKey] === "TP/SL" : true
           const showNoSl = isWarning && Boolean(noSlKey) && !hasStopLoss
+          // Reason shown INSIDE the bar itself (appended to whatever text
+          // the bar already carries -- the Symbol, or "No SL!" when that
+          // also applies), lower case, e.g. "AUD/CHF - weekend" or
+          // "No SL! - daily dd + weekend" -- not a separate badge floating
+          // outside the bar.
+          const barInnerLabel = showNoSl ? "No SL!" : label
+          const barLabel = isWarning && reasonLabel ? `${barInnerLabel} - ${reasonLabel}` : barInnerLabel
 
           return (
             <div key={`${row.A_Platform}|${row.A_AccountID}`} className="flex h-9 items-stretch">
               <div className="flex flex-1 items-center justify-end gap-2">
                 {barLeft ? (
                   <>
-                    {reasonBadge}
                     <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
                     <div
                       style={{ width: `${widthPct}%` }}
                       className={`flex h-6 min-w-8 items-center justify-end rounded-l bg-red-600 px-2${barBlinkClass}`}
                     >
-                      <span className="truncate text-xs font-bold text-white">{showNoSl ? "No SL!" : label}</span>
+                      <span className="truncate text-xs font-bold text-white">{barLabel}</span>
                     </div>
                   </>
                 ) : (
@@ -231,7 +234,6 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     <>
                       <span className="truncate pl-2 text-xs font-medium text-slate-500">{label}</span>
                       <span className="shrink-0 text-xs tabular-nums text-slate-400">{pctLabel}</span>
-                      {reasonBadge}
                     </>
                   ) : (
                     <>
@@ -239,10 +241,9 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                         style={{ width: `${widthPct}%` }}
                         className={`flex h-6 min-w-8 items-center rounded-r ${positiveColorClass} px-2${barBlinkClass}`}
                       >
-                        <span className="truncate text-xs font-bold text-white">{showNoSl ? "No SL!" : label}</span>
+                        <span className="truncate text-xs font-bold text-white">{barLabel}</span>
                       </div>
                       <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
-                      {reasonBadge}
                     </>
                   )
                 ) : (

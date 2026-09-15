@@ -150,14 +150,14 @@ export default function AccountChartsPage() {
             <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Daily DD Chart</h3>
             </div>
-            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" warningLabel="Daily DD" extraWarningKey="A_OverWeekendWarning" extraWarningLabel="Weekend" noSlKey="A_TPSL" />
+            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" warningLabel="daily dd" extraWarningKey="A_OverWeekendWarning" extraWarningLabel="weekend" noSlKey="A_TPSL" />
           </section>
 
           <section>
             <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Full Chart</h3>
             </div>
-            <AccountChartPage rows={chartRows} warningKey="A_MaxDrawdownWarning" warningLabel="Max DD" extraWarningKey="A_OverWeekendWarning" extraWarningLabel="Weekend" />
+            <AccountChartPage rows={chartRows} warningKey="A_MaxDrawdownWarning" warningLabel="max dd" extraWarningKey="A_OverWeekendWarning" extraWarningLabel="weekend" />
           </section>
         </div>
       )}
