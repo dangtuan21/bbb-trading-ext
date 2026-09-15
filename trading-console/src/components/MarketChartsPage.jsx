@@ -43,7 +43,7 @@ export default function MarketChartsPage() {
   // shared piece of state for BOTH charts on the page -- they're two views
   // of the same account set, so switching this should move both sections
   // together rather than each having its own independent filter.
-  const [chartFilter, setChartFilter] = useState("both")
+  const [chartFilter, setChartFilter] = useState("all")
 
   // Full Chart's rows -- always Market View's OPEN-position accounts
   // (A_Symbol real, not "n/a"), regardless of whatever filter happens to be
@@ -93,6 +93,15 @@ export default function MarketChartsPage() {
               <input
                 type="radio"
                 name="market-chart-filter"
+                checked={chartFilter === "all"}
+                onChange={() => setChartFilter("all")}
+              />
+              All
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="radio"
+                name="market-chart-filter"
                 checked={chartFilter === "both"}
                 onChange={() => setChartFilter("both")}
               />
@@ -106,15 +115,6 @@ export default function MarketChartsPage() {
                 onChange={() => setChartFilter("aonly")}
               />
               A only
-            </label>
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <input
-                type="radio"
-                name="market-chart-filter"
-                checked={chartFilter === "all"}
-                onChange={() => setChartFilter("all")}
-              />
-              All
             </label>
             {/* Same "no auto-poll, click here to fetch" button as Market
                 View's own Refresh (see that page's comment) -- this page

@@ -141,19 +141,27 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // harmless to compute.
           const widthPct = Math.min(Math.max((Math.abs(pct) / rowScaleMax) * 100, 2), 100)
           const last4 = row.A_AccountID ? String(row.A_AccountID).slice(-4) : ""
-          // e.g. "6781 (4/6)" -- current trades (A_TotalTrades, blank
+          // Same RF/FTMO/AC abbreviation minTradesKeyForPlatform already
+          // maps A_Platform to (see its own comment) -- reused here as a
+          // display prefix so the chart label reads "FTMO 9427"/"RF 5442"
+          // instead of a bare, ambiguous "9427" once accounts from more
+          // than one platform are on screen together. Platforms it doesn't
+          // cover (tastyfx, OANDA, forex.com) get no prefix, same as
+          // before.
+          const minTradesPlatformKey = minTradesKeyForPlatform(row.A_Platform)
+          const accountLabel = last4 && minTradesPlatformKey ? `${minTradesPlatformKey} ${last4}` : last4
+          // e.g. "FTMO 9427 (4/6)" -- current trades (A_TotalTrades, blank
           // shown as 0) over that platform's Min Trades setting. Only
           // platforms Min Trades actually covers (RF/FTMO/AC) get the
           // "(x/y)" suffix, and only when that platform's Min Trades is
           // actually set above 0 -- a 0 (FTMO/AlphaCapital's default,
           // meaning "not tracked for this platform yet") means there's
           // nothing meaningful to divide by, so it's the same as not
-          // covering that platform at all: plain last4.
-          const minTradesPlatformKey = minTradesKeyForPlatform(row.A_Platform)
+          // covering that platform at all: plain accountLabel.
           const minTradesValue = minTradesPlatformKey ? minTrades[minTradesPlatformKey] : 0
-          const last4Label = last4 && minTradesValue > 0
-            ? last4 + " (" + (row.A_TotalTrades || 0) + "/" + minTradesValue + ")"
-            : last4
+          const last4Label = accountLabel && minTradesValue > 0
+            ? accountLabel + " (" + (row.A_TotalTrades || 0) + "/" + minTradesValue + ")"
+            : accountLabel
           const label = row.A_Symbol
           const pctLabel = formatPct(row[pctKey])
           // `warningKey` reads an already-computed boolean warning flag off

@@ -35,7 +35,7 @@ export default function AccountChartsPage() {
   // together rather than each having its own independent filter (that was
   // tried and reverted -- see chartRows/dailyDdChartRows below, both keyed
   // off this same chartFilter).
-  const [chartFilter, setChartFilter] = useState("both")
+  const [chartFilter, setChartFilter] = useState("all")
 
   // Full Chart's rows -- always Account View's OPEN-position accounts
   // (A_Symbol real, not "n/a"), regardless of whatever filter happens to be
@@ -85,6 +85,15 @@ export default function AccountChartsPage() {
               <input
                 type="radio"
                 name="chart-filter"
+                checked={chartFilter === "all"}
+                onChange={() => setChartFilter("all")}
+              />
+              All
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="radio"
+                name="chart-filter"
                 checked={chartFilter === "both"}
                 onChange={() => setChartFilter("both")}
               />
@@ -98,15 +107,6 @@ export default function AccountChartsPage() {
                 onChange={() => setChartFilter("aonly")}
               />
               A only
-            </label>
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <input
-                type="radio"
-                name="chart-filter"
-                checked={chartFilter === "all"}
-                onChange={() => setChartFilter("all")}
-              />
-              All
             </label>
           </div>
 
