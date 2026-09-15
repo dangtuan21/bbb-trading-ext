@@ -307,10 +307,22 @@ export function computeMainView(
         }
       }
     }
+    // Effective Profit Target: the real scraped l.ProfitTarget when there
+    // is one (RF -- read off RF-Trader's own Profit Target row), otherwise
+    // falls back to l.MaxDrawdownAmount -- per Tuan (2026-09-15): FTMO
+    // Rewards accounts never expose a Profit Target at all (see
+    // ext-ftmo/content.js -- it's a funded account, not an evaluation
+    // challenge, so FTMO's own page has no such objective to scrape), which
+    // left A_PLPct permanently blank for FTMO once equity rose back above
+    // InitialBalance (the profit-target branch below had nothing to divide
+    // by) -- Max DD is the nearest stand-in FTMO's page DOES expose
+    // (its own loss allowance), used here only as a default, never
+    // overriding a real scraped ProfitTarget.
+    const effectiveProfitTarget = l.ProfitTarget !== "" && l.ProfitTarget != null ? l.ProfitTarget : l.MaxDrawdownAmount
     // InitialBalance + A_ProfitTarget (A Target PL) -- the account's equity
     // once it hits its profit target. Blank if either side is
     // missing/non-numeric (e.g. no InitialBalance scraped yet).
-    const targetEquity = addMoney(l.InitialBalance, l.ProfitTarget)
+    const targetEquity = addMoney(l.InitialBalance, effectiveProfitTarget)
     // A_PLPct ("A PL %") reads differently depending on whether A_Equity is
     // at or above A_InitialBalance, or below it:
     //  - Equity >= InitialBalance (or either is unknown): (Equity -
@@ -334,7 +346,7 @@ export function computeMainView(
     const plPct =
       equityNum !== null && initialBalanceNum !== null && equityNum < initialBalanceNum
         ? ddPct === "" ? "" : round2(-ddPct)
-        : pctOf(subMoney(l.Equity, l.InitialBalance), l.ProfitTarget)
+        : pctOf(subMoney(l.Equity, l.InitialBalance), effectiveProfitTarget)
     // Computed ahead of the push below so it can also feed A_TPSLWarning --
     // once Daily DD is already flagged, a missing Stop Loss is a bigger
     // deal than usual, so that same warning state widens what counts as a
@@ -359,7 +371,7 @@ export function computeMainView(
       A_AccountLabel: l.AccountLabel,
       A_Balance: l.Balance,
       A_Equity: l.Equity,
-      A_ProfitTarget: l.ProfitTarget || "",
+      A_ProfitTarget: effectiveProfitTarget || "",
       A_TargetEquity: targetEquity,
       A_PLPct: plPct,
       A_AccountPL: l.AccountPL,
@@ -417,7 +429,7 @@ export function computeMainView(
       // passing its challenge. Same ratio check as the two drawdown
       // warnings above, just applied to a "getting close to a goal"
       // pairing instead of a "getting close to a limit" one.
-      A_TargetProfitWarning: hasOpenPosition && isRatioWarning(l.ProfitTarget, l.AccountPL, warningTargetProfitPct),
+      A_TargetProfitWarning: hasOpenPosition && isRatioWarning(effectiveProfitTarget, l.AccountPL, warningTargetProfitPct),
       // Flags just the A PL % cell once A_PLPct itself reaches the
       // configured % -- a direct value-vs-threshold check (A_PLPct is
       // already a percentage), unlike the ratio-of-two-amounts checks above.
