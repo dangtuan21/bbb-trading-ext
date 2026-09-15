@@ -15,9 +15,12 @@
  * relative-time string, e.g. "2m ago") takes over from `sourceFile` in the
  * ready line once there's an actual timestamp to show.
  *
- * `rowCount` (optional) prefixes the ready line as "N rows · ". Omitted by
- * AccountChartsPage, which shows two different section-level counts (Full
- * Chart vs Daily DD Chart) instead of one page-level number.
+ * `rowCount` (optional) prefixes the ready line as "N rows · ". Account
+ * Chart/Market Chart pass it too now -- the open-position/filter-matched
+ * count shown on this page, which can differ slightly from either
+ * individual chart section's own row count (each applies a further
+ * per-metric NaN filter on top of this) -- see those pages' filteredRows
+ * comment.
  */
 export default function PageHeader({ title, status, error, sourceFile, freshnessLabel, rowCount }) {
   return (

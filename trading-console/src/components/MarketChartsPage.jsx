@@ -22,8 +22,9 @@ import { useDailyDdChartScaleMax, useOverWeekend } from "../lib/settings"
  * Market View's full joined row set, UNFILTERED by whatever filter happens
  * to be set on the Market View tab itself -- this page derives its own two
  * row sets from it (see chartRows/dailyDdChartRows below). No row count in
- * the shared PageHeader (there are two different ones, shown per-section
- * instead) -- see PageHeader's own `rowCount` comment.
+ * PageHeader's rowCount shows filteredRows.length -- the open-position/
+ * chartFilter-matched set BEFORE either chart's own further per-metric
+ * NaN filter -- see filteredRows' own comment below.
  *
  * Also surfaces the same Refresh button as Market View (see that page's
  * comment on why one exists at all -- market-server doesn't auto-poll
@@ -62,6 +63,22 @@ export default function MarketChartsPage() {
   // of the same account set, so switching this should move both sections
   // together rather than each having its own independent filter.
   const [chartFilter, setChartFilter] = useState("all")
+
+  // Page-level row count for the PageHeader line (matches Account View/
+  // Market View's own "N rows · <freshness>" -- see PageHeader's rowCount
+  // prop), e.g. "7 rows · 2m ago". This is the OPEN-position/chartFilter-
+  // matched set BEFORE either chart's own further per-metric NaN filter
+  // (A_PLPct for Full Chart, A_TodayDrawdownPct for Daily DD Chart) --
+  // those two can differ from each other and from this number (that's
+  // exactly the FTMO-missing-ProfitTarget case fixed earlier), so this is
+  // "how many accounts are on this page", not either individual chart's
+  // own count.
+  const filteredRows = useMemo(() => {
+    const base = rows.filter((row) => row.A_Symbol !== "n/a")
+    if (chartFilter === "all") return base
+    if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
+    return base.filter((row) => row.B_Platform)
+  }, [rows, chartFilter])
 
   // Full Chart's rows -- always Market View's OPEN-position accounts
   // (A_Symbol real, not "n/a"), regardless of whatever filter happens to be
@@ -119,6 +136,7 @@ export default function MarketChartsPage() {
         error={error}
         sourceFile={sourceFile}
         freshnessLabel={freshnessLabel}
+        rowCount={filteredRows.length}
       />
 
       {status === "ready" && (
