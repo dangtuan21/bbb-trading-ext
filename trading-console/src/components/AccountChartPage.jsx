@@ -210,6 +210,20 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // : default-start on the bar div, unchanged) -- this is a second,
           // independently-positioned span via `absolute`, not appended into
           // that same string, so the two never fight over one alignment.
+          //
+          // The blink (barBlinkClass, animate-chart-bar-blink -- pulses
+          // opacity) now lives on its OWN plain `absolute inset-0`
+          // background layer, a SIBLING behind both text spans rather than
+          // their shared parent. Both text spans were children of the
+          // animated element before, so opacity-blinking that whole box
+          // dimmed them too -- barely visible on white (Symbol), very
+          // visible on brown (reason), reading as "only the reason
+          // flashes" even though both were technically animating together.
+          // Moving the animation to a background-only layer keeps every
+          // bit of TEXT rock-stable (matching Symbol's original look) and
+          // confines the flashing to the bar's fill color, which was the
+          // actual intent from the start (see chart-bar-blink's own CSS
+          // comment: the color IS the signal, not the text).
           const barInnerLabel = showNoSl ? "No SL!" : label
           const showReason = isWarning && Boolean(reasonLabel)
 
@@ -221,12 +235,13 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
                     <div
                       style={{ width: `${widthPct}%` }}
-                      className={`relative flex h-6 min-w-8 items-center justify-end rounded-l bg-red-600 px-2${barBlinkClass}`}
+                      className="relative flex h-6 min-w-8 items-center justify-end"
                     >
+                      <div className={`absolute inset-0 rounded-l bg-red-600${barBlinkClass}`} />
                       {showReason && (
                         <span className="absolute left-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
                       )}
-                      <span className="truncate text-xs font-bold text-white">{barInnerLabel}</span>
+                      <span className="relative truncate px-2 text-xs font-bold text-white">{barInnerLabel}</span>
                     </div>
                   </>
                 ) : (
@@ -245,9 +260,10 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     <>
                       <div
                         style={{ width: `${widthPct}%` }}
-                        className={`relative flex h-6 min-w-8 items-center rounded-r ${positiveColorClass} px-2${barBlinkClass}`}
+                        className="relative flex h-6 min-w-8 items-center"
                       >
-                        <span className="truncate text-xs font-bold text-white">{barInnerLabel}</span>
+                        <div className={`absolute inset-0 rounded-r ${positiveColorClass}${barBlinkClass}`} />
+                        <span className="relative truncate px-2 text-xs font-bold text-white">{barInnerLabel}</span>
                         {showReason && (
                           <span className="absolute right-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
                         )}
