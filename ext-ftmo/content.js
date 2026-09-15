@@ -16,6 +16,15 @@ const LABEL_VARIANTS = {
   balance: ['Balance', 'Account Balance', 'Starting Balance'],
   equity: ['Equity', 'Current Equity', 'Account Equity'],
   pl: ['Unrealized PnL', 'Unrealized P/L', 'P&L', 'P/L', 'Profit', 'Total P&L', 'Account P&L'],
+  // The account overview strip's own "Account size: $10,000.00" -- the
+  // funded capital amount for this Rewards account. Used as InitialBalance
+  // (see parseAccountSummary): without it, compute.js's A_PLPct formula
+  // (trading-console/src/lib/compute.js) can't even pick its drawdown
+  // branch -- InitialBalance being blank makes BOTH branches come back
+  // blank regardless of CurrentValueAmount/MaxDrawdownAmount, which is
+  // exactly why FTMO stayed off the Full Chart even after those two were
+  // added.
+  accountSize: ['Account size'],
 };
 
 const ORDER_ID_RE = /^\d{5,}$/;
@@ -165,6 +174,7 @@ function getPageLines() {
 function parseAccountSummary(lines) {
   const balance = money(valueAfterAny(lines, LABEL_VARIANTS.balance));
   const equity = money(valueAfterAny(lines, LABEL_VARIANTS.equity));
+  const initialBalance = money(valueAfterAny(lines, LABEL_VARIANTS.accountSize));
   // Read directly from whichever P/L label is actually on the page (see
   // LABEL_VARIANTS.pl) -- no Equity-Balance fallback if none of those
   // labels are found; left blank rather than derived.
@@ -179,6 +189,7 @@ function parseAccountSummary(lines) {
   return {
     balance, equity, accountPL, maxDailyDrawdown, maxDailyDrawdownPct,
     todayDrawdown, todayDrawdownPct, maxDrawdownAmount, currentValueAmount,
+    initialBalance,
   };
 }
 
@@ -302,6 +313,7 @@ function buildRows(summary, positions) {
     TodayDrawdownPct: summary.todayDrawdownPct,
     MaxDrawdownAmount: summary.maxDrawdownAmount,
     CurrentValueAmount: summary.currentValueAmount,
+    InitialBalance: summary.initialBalance,
   };
 
   if (!positions.length) {

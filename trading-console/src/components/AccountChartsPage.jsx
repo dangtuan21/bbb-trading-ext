@@ -46,6 +46,7 @@ export default function AccountChartsPage() {
   // narrows further to A&B-matched rows or A-only rows.
   const chartRows = useMemo(() => {
     const base = rows.filter((row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_PLPct)))
+    if (chartFilter === "all") return base
     if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
     return base.filter((row) => row.B_Platform)
   }, [rows, chartFilter])
@@ -61,6 +62,7 @@ export default function AccountChartsPage() {
   // own isZero handling.
   const dailyDdChartRows = useMemo(() => {
     const base = rows.filter((row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_TodayDrawdownPct)))
+    if (chartFilter === "all") return base
     if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
     return base.filter((row) => row.B_Platform)
   }, [rows, chartFilter])
@@ -96,6 +98,15 @@ export default function AccountChartsPage() {
                 onChange={() => setChartFilter("aonly")}
               />
               A only
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="radio"
+                name="chart-filter"
+                checked={chartFilter === "all"}
+                onChange={() => setChartFilter("all")}
+              />
+              All
             </label>
           </div>
 
