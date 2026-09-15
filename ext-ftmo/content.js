@@ -69,6 +69,26 @@ function parseMaxLoss(lines) {
   return '';
 }
 
+// "Max Loss: -$1,000" (the Objectives-table row above) is followed by its
+// Result cell a line or two later, e.g. "-$170.04 (-1.7%)" -- how much of
+// that $1,000 allowance is currently used. This is the CurrentValueAmount
+// companion to MaxDrawdownAmount above, and without it trading-console's
+// A_PLPct drawdown-branch formula (CurrentValueAmount / MaxDrawdownAmount,
+// see compute.js) has nothing to divide and stays blank for every FTMO
+// account -- confirmed live via a real screenshot of this exact Objectives
+// row for account 650009427. Stored as a positive magnitude, same
+// convention as parseMaxLoss above (and RF's own CurrentValueAmount).
+function parseMaxLossResult(lines) {
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith('Max Loss:')) continue;
+    for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+      const m = /^-?\$\s*([\d,]+(?:\.\d+)?)/.exec(lines[j]);
+      if (m) return m[1].replace(/,/g, '');
+    }
+  }
+  return '';
+}
+
 // MaxDailyDrawdown/TodayDrawdown ("Max Daily DD"/"Cur Daily DD" in MainView)
 // read straight off the "Your stats" strip near the bottom of the page --
 // NOT the Objectives table's "Max Daily Loss: -$500"/Result pair above,
@@ -155,9 +175,10 @@ function parseAccountSummary(lines) {
   const maxDailyDrawdownPct = pctOf(maxDailyDrawdown, balance);
   const todayDrawdownPct = pctOf(todayDrawdown, balance);
   const maxDrawdownAmount = parseMaxLoss(lines);
+  const currentValueAmount = parseMaxLossResult(lines);
   return {
     balance, equity, accountPL, maxDailyDrawdown, maxDailyDrawdownPct,
-    todayDrawdown, todayDrawdownPct, maxDrawdownAmount,
+    todayDrawdown, todayDrawdownPct, maxDrawdownAmount, currentValueAmount,
   };
 }
 
@@ -280,6 +301,7 @@ function buildRows(summary, positions) {
     TodayDrawdown: summary.todayDrawdown,
     TodayDrawdownPct: summary.todayDrawdownPct,
     MaxDrawdownAmount: summary.maxDrawdownAmount,
+    CurrentValueAmount: summary.currentValueAmount,
   };
 
   if (!positions.length) {
@@ -320,7 +342,7 @@ async function captureFtmoRows() {
   // surface every line that plausibly relates so the real label/layout can
   // be read off directly instead of guessed blind, same approach that
   // nailed down RebelsFunding's real "Today's Drawdown" label.
-  const drawdownDiag = !summary.maxDailyDrawdown || !summary.todayDrawdown || !summary.maxDrawdownAmount
+  const drawdownDiag = !summary.maxDailyDrawdown || !summary.todayDrawdown || !summary.maxDrawdownAmount || !summary.currentValueAmount
     ? { reason: 'drawdown-labels-not-found', nearbyLines: lines.filter((l) => /permitted|profit|loss/i.test(l)) }
     : null;
 
