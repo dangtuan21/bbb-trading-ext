@@ -82,7 +82,7 @@ function minTradesKeyForPlatform(platform) {
  * read off the two ends of the chart nearest the green/red boundary, not
  * one single top-to-bottom ranking across both colors.
  */
-export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, extraWarningKey, noSlKey }) {
+export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, warningLabel = "DD", extraWarningKey, extraWarningLabel = "Weekend", noSlKey }) {
   const [minTrades] = useMinTrades()
   if (!rows.length) {
     return (
@@ -175,11 +175,24 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // (e.g. A_OverWeekendWarning -- Friday + that platform's Over
           // Weekend setting is Off, see AccountChartsPage/MarketChartsPage)
           // on top of whichever per-chart warningKey is already blinking
-          // the bar (A_MaxDrawdownWarning/A_DailyDrawdownWarning) -- either
-          // one blinking is enough to blink the bar, they aren't shown as
-          // visually distinct reasons.
-          const isWarning = (warningKey ? Boolean(row[warningKey]) : false) || (extraWarningKey ? Boolean(row[extraWarningKey]) : false)
+          // the bar (A_MaxDrawdownWarning/A_DailyDrawdownWarning). Tracked
+          // separately (not just OR'd into one boolean) so reasonLabel
+          // below can say WHICH one(s) fired -- a blinking bar with no
+          // indication of why was the actual complaint that led here.
+          const warningActive = warningKey ? Boolean(row[warningKey]) : false
+          const extraWarningActive = extraWarningKey ? Boolean(row[extraWarningKey]) : false
+          const isWarning = warningActive || extraWarningActive
           const barBlinkClass = isWarning ? " animate-chart-bar-blink" : ""
+          // Plain-text reason(s) for the blink, e.g. "DD", "Weekend", or
+          // "DD + Weekend" when both fire at once -- warningLabel/
+          // extraWarningLabel are caller-supplied strings naming what each
+          // key actually means (AccountChartsPage/MarketChartsPage pass
+          // "Max DD"/"Daily DD" and "Weekend" respectively), since this
+          // component only knows the boolean, not what it represents.
+          const reasonLabel = [warningActive && warningLabel, extraWarningActive && extraWarningLabel].filter(Boolean).join(" + ")
+          const reasonBadge = isWarning && reasonLabel ? (
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-600">{reasonLabel}</span>
+          ) : null
           // `noSlKey` reads the row's TP/SL label field (A_TPSL: "TP/SL",
           // "TP", "SL", or "" -- see compute.js's tpSlLabel) to tell whether
           // a Stop Loss is set. Only used by the Daily DD Chart
@@ -198,6 +211,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
               <div className="flex flex-1 items-center justify-end gap-2">
                 {barLeft ? (
                   <>
+                    {reasonBadge}
                     <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
                     <div
                       style={{ width: `${widthPct}%` }}
@@ -217,6 +231,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     <>
                       <span className="truncate pl-2 text-xs font-medium text-slate-500">{label}</span>
                       <span className="shrink-0 text-xs tabular-nums text-slate-400">{pctLabel}</span>
+                      {reasonBadge}
                     </>
                   ) : (
                     <>
@@ -227,6 +242,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                         <span className="truncate text-xs font-bold text-white">{showNoSl ? "No SL!" : label}</span>
                       </div>
                       <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
+                      {reasonBadge}
                     </>
                   )
                 ) : (
