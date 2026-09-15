@@ -24,7 +24,13 @@ const LABEL_VARIANTS = {
   // blank regardless of CurrentValueAmount/MaxDrawdownAmount, which is
   // exactly why FTMO stayed off the Full Chart even after those two were
   // added.
-  accountSize: ['Account size'],
+  // The page renders this label WITH a trailing colon ("Account size:"),
+  // unlike Balance/Equity/PnL above which render bare -- confirmed live via
+  // a real innerText dump ("Account size:\n$10,000.00") after the first
+  // version of this fix (colon-less) silently matched nothing and left
+  // InitialBalance blank. Both spellings listed so a future rendering
+  // change either way still matches.
+  accountSize: ['Account size:', 'Account size'],
 };
 
 const ORDER_ID_RE = /^\d{5,}$/;

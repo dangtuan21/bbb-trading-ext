@@ -82,7 +82,7 @@ function minTradesKeyForPlatform(platform) {
  * read off the two ends of the chart nearest the green/red boundary, not
  * one single top-to-bottom ranking across both colors.
  */
-export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, noSlKey }) {
+export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, extraWarningKey, noSlKey }) {
   const [minTrades] = useMinTrades()
   if (!rows.length) {
     return (
@@ -171,7 +171,14 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // a threshold check here. Blinks the bar itself (not the whole
           // row) so the red/green color coding stays intact -- it's an
           // added attention cue, not a replacement for it.
-          const isWarning = warningKey ? Boolean(row[warningKey]) : false
+          // extraWarningKey ORs in a second, independent warning condition
+          // (e.g. A_OverWeekendWarning -- Friday + that platform's Over
+          // Weekend setting is Off, see AccountChartsPage/MarketChartsPage)
+          // on top of whichever per-chart warningKey is already blinking
+          // the bar (A_MaxDrawdownWarning/A_DailyDrawdownWarning) -- either
+          // one blinking is enough to blink the bar, they aren't shown as
+          // visually distinct reasons.
+          const isWarning = (warningKey ? Boolean(row[warningKey]) : false) || (extraWarningKey ? Boolean(row[extraWarningKey]) : false)
           const barBlinkClass = isWarning ? " animate-chart-bar-blink" : ""
           // `noSlKey` reads the row's TP/SL label field (A_TPSL: "TP/SL",
           // "TP", "SL", or "" -- see compute.js's tpSlLabel) to tell whether

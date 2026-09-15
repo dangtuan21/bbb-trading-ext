@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import AccountChartPage from "./AccountChartPage"
 import PageHeader from "./PageHeader"
 import { useAccountView } from "../lib/useAccountView"
-import { useDailyDdChartScaleMax } from "../lib/settings"
+import { useDailyDdChartScaleMax, useOverWeekend } from "../lib/settings"
 
 /**
  * AccountChartsPage: the "chart" nav item -- Daily DD Chart stacked on top
@@ -22,10 +22,28 @@ import { useDailyDdChartScaleMax } from "../lib/settings"
  * are two different ones, shown per-section instead) -- see PageHeader's
  * own `rowCount` comment.
  */
+
+// A_Platform -> the short RF/FTMO/AC key useOverWeekend()/useMinTrades()
+// store settings under -- same mapping AccountChartPage.jsx keeps its own
+// copy of for the same reason (see that file's minTradesKeyForPlatform).
+function overWeekendKeyForPlatform(platform) {
+  if (platform === "RebelsFunding") return "RF"
+  if (platform === "FTMO") return "FTMO"
+  if (platform === "AlphaCapital") return "AC"
+  return null
+}
+
 export default function AccountChartsPage() {
   const [dailyDdChartScaleMax] = useDailyDdChartScaleMax()
+  const [overWeekend] = useOverWeekend()
   const { mainView, status, error, sourceFile, freshnessLabel } = useAccountView()
   const rows = mainView.joined
+  // Friday + that account's platform has Over Weekend set to Off --
+  // evaluated once per render off the real wall clock (not from any CSV
+  // field), so it naturally flips on/off as the week turns without a
+  // capture even having to run. getDay()===5 is Friday regardless of
+  // locale/timezone setting on this machine.
+  const isFriday = new Date().getDay() === 5
   // "A&B" (default) keeps only rows with a real B-side match (B_Platform
   // set -- see computeMainView's ruleTarget/r lookup: a row only gets B_*
   // fields when a matchRule paired it with an actual B-side position),
@@ -46,10 +64,20 @@ export default function AccountChartsPage() {
   // narrows further to A&B-matched rows or A-only rows.
   const chartRows = useMemo(() => {
     const base = rows.filter((row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_PLPct)))
-    if (chartFilter === "all") return base
-    if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
-    return base.filter((row) => row.B_Platform)
-  }, [rows, chartFilter])
+    const matched =
+      chartFilter === "all" ? base
+      : chartFilter === "aonly" ? base.filter((row) => !row.B_Platform)
+      : base.filter((row) => row.B_Platform)
+    // A_OverWeekendWarning: an open position, on Friday, on a platform
+    // whose Over Weekend setting is explicitly Off (Settings page) -- read
+    // by AccountChartPage's extraWarningKey to blink the bar as a "close
+    // this before the weekend" reminder. Platforms Over Weekend doesn't
+    // cover (overWeekendKeyForPlatform returns null) never warn.
+    return matched.map((row) => {
+      const key = overWeekendKeyForPlatform(row.A_Platform)
+      return { ...row, A_OverWeekendWarning: isFriday && key !== null && overWeekend[key] === false }
+    })
+  }, [rows, chartFilter, isFriday, overWeekend])
 
   // Daily DD Chart -- same nav grouping as Full Chart (stacked right above
   // it) and reuses the exact same AccountChartPage component, just plotting
@@ -62,10 +90,18 @@ export default function AccountChartsPage() {
   // own isZero handling.
   const dailyDdChartRows = useMemo(() => {
     const base = rows.filter((row) => row.A_Symbol !== "n/a" && !Number.isNaN(parseFloat(row.A_TodayDrawdownPct)))
-    if (chartFilter === "all") return base
-    if (chartFilter === "aonly") return base.filter((row) => !row.B_Platform)
-    return base.filter((row) => row.B_Platform)
-  }, [rows, chartFilter])
+    const matched =
+      chartFilter === "all" ? base
+      : chartFilter === "aonly" ? base.filter((row) => !row.B_Platform)
+      : base.filter((row) => row.B_Platform)
+    // Same A_OverWeekendWarning annotation as chartRows above (see its
+    // comment) -- shared here too since Daily DD Chart's bars should blink
+    // for the same Friday/Over-Weekend-Off reason.
+    return matched.map((row) => {
+      const key = overWeekendKeyForPlatform(row.A_Platform)
+      return { ...row, A_OverWeekendWarning: isFriday && key !== null && overWeekend[key] === false }
+    })
+  }, [rows, chartFilter, isFriday, overWeekend])
 
   return (
     <>
@@ -114,14 +150,14 @@ export default function AccountChartsPage() {
             <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Daily DD Chart</h3>
             </div>
-            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" noSlKey="A_TPSL" />
+            <AccountChartPage rows={dailyDdChartRows} pctKey="A_TodayDrawdownPct" positiveColorClass="bg-red-600" growLeft scaleMax={dailyDdChartScaleMax} scaleMaxKey="A_MaxDailyDrawdownPct" warningKey="A_DailyDrawdownWarning" extraWarningKey="A_OverWeekendWarning" noSlKey="A_TPSL" />
           </section>
 
           <section>
             <div className="mb-3">
               <h3 className="text-sm font-semibold text-slate-700">Full Chart</h3>
             </div>
-            <AccountChartPage rows={chartRows} warningKey="A_MaxDrawdownWarning" />
+            <AccountChartPage rows={chartRows} warningKey="A_MaxDrawdownWarning" extraWarningKey="A_OverWeekendWarning" />
           </section>
         </div>
       )}
