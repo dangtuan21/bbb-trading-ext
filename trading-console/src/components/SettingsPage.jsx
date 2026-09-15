@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import { hiddenAccounts } from "../lib/hiddenAccounts"
 import {
   useWarningDailyDrawdownThreshold,
   useWarningDrawdownThreshold,
@@ -7,6 +6,7 @@ import {
   useWarningTPSLEnabled,
   useDailyDdChartScaleMax,
   useMinTrades,
+  useOverWeekend,
 } from "../lib/settings"
 
 const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
@@ -130,6 +130,41 @@ function RadioField({ id, label, value, options, onChange, disabled }) {
   )
 }
 
+// Over Weekend per platform (RF/FTMO/AC) -- see lib/settings.js's
+// useOverWeekend for the storage shape/defaults. Per Tuan (2026-09-15):
+// just stored here for now, same as Min Trades -- no behavior wired to it
+// yet. Reuses ToggleField (already defined above for Warning TP/SL) rather
+// than a new boolean-field component.
+function OverWeekendSection() {
+  const [overWeekend, setOverWeekendPlatform] = useOverWeekend()
+
+  return (
+    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold text-slate-700">Over Weekend</h3>
+      <div className="flex flex-col gap-4">
+        <ToggleField
+          id="over-weekend-rf"
+          label="RebelsFunding"
+          value={overWeekend.RF}
+          onChange={(v) => setOverWeekendPlatform("RF", v)}
+        />
+        <ToggleField
+          id="over-weekend-ftmo"
+          label="FTMO"
+          value={overWeekend.FTMO}
+          onChange={(v) => setOverWeekendPlatform("FTMO", v)}
+        />
+        <ToggleField
+          id="over-weekend-ac"
+          label="AlphaCapital"
+          value={overWeekend.AC}
+          onChange={(v) => setOverWeekendPlatform("AC", v)}
+        />
+      </div>
+    </div>
+  )
+}
+
 // Which data feeds the Pushover phone alerts ext-server's
 // checkWarningsAndNotify() sends (see that file's own comment) --
 // "market" (default) reads market-server's FX-priced market-positions.csv
@@ -141,8 +176,7 @@ function RadioField({ id, label, value, options, onChange, disabled }) {
 // change what it alerts on, so it's persisted server-side in
 // notify-config.json via GET/POST /config/notify-settings and
 // /config/notify-data-source instead -- fetched on mount, posted on
-// change, same pattern HiddenAccountsSection below uses for its own
-// server round trips.
+// change.
 function NotifyDataSourceSection() {
   const [dataSource, setDataSource] = useState(null) // null while loading
   const [saving, setSaving] = useState(false)
@@ -241,81 +275,15 @@ function MinTradesSection() {
   )
 }
 
-// Lists every account hidden via RuleEditForm's "Hide Account" button (see
-// lib/hiddenAccounts.js) with an "Unhide" button per row -- the only place
-// to reverse a hide, since a hidden row has no MainView link to reopen the
-// edit modal from. No local list-shrinking on success: editing config.json
-// makes Vite's dev-server file watcher reload the page, same mechanism
-// RuleEditForm's Save/Delete already rely on to pick up config.json
-// changes, so `hiddenAccounts` itself refreshes without any extra
-// plumbing here.
-function HiddenAccountsSection({ hiddenAccounts }) {
-  const [busyKey, setBusyKey] = useState(null)
-  const [error, setError] = useState(null)
-
-  async function handleUnhide(platform, accountId) {
-    const key = `${platform}|${accountId}`
-    setBusyKey(key)
-    setError(null)
-    try {
-      const res = await fetch(`${SERVER_URL}/config/account-visibility`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aPlatform: platform, aAccountId: accountId, hidden: false }),
-      })
-      const result = await res.json()
-      if (!result.ok) throw new Error(result.error || "Server rejected the update")
-    } catch (err) {
-      setError(`Could not unhide (${err.message}). Is ext-server running?`)
-      setBusyKey(null)
-    }
-  }
-
-  if (!hiddenAccounts.length) return null
-
-  return (
-    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-1 text-sm font-semibold text-slate-700">Hidden Accounts</h3>
-      <p className="mb-3 text-xs text-slate-400">
-        Excluded from Account View -- still scraped and recorded, just not shown.
-      </p>
-      {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
-      <ul className="flex flex-col gap-1.5">
-        {hiddenAccounts.map((h) => {
-          const key = `${h.platform}|${h.accountId}`
-          return (
-            <li
-              key={key}
-              className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-1.5 text-sm"
-            >
-              <span className="text-slate-700">
-                {h.platform} · {h.accountId}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleUnhide(h.platform, h.accountId)}
-                disabled={busyKey === key}
-                className="rounded-md px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
-              >
-                {busyKey === key ? "Unhiding..." : "Unhide"}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
-}
-
 // Settings has no CSV fetch of its own (nothing to be "loading" or
 // "error" here, unlike every other tab -- see those pages' own PageHeader
 // usage), so it renders a plain title rather than pulling in PageHeader's
 // status-driven loading/error/row-count machinery for a page that never
 // uses any of it.
 //
-// Reads/writes all four warning settings and hiddenAccounts itself, via the
-// same hooks/import AccountViewPage/AccountChartsPage/MarketViewPage read
-// from (useMainViewFor/useMainViewColumns) -- takes no props at all, rather
+// Reads/writes all warning settings itself, via the same hooks
+// AccountViewPage/AccountChartsPage/MarketViewPage read from
+// (useMainViewFor/useMainViewColumns) -- takes no props at all, rather
 // than App.jsx owning this state and threading value/onChange pairs down.
 // Since Settings is never mounted at the same time as any tab that reads
 // these (only one tab renders at a time), a change made here is simply
@@ -366,8 +334,8 @@ export default function SettingsPage() {
         </div>
       </div>
       <MinTradesSection />
+      <OverWeekendSection />
       <NotifyDataSourceSection />
-      <HiddenAccountsSection hiddenAccounts={hiddenAccounts} />
     </div>
   )
 }

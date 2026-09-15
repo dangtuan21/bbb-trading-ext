@@ -181,3 +181,40 @@ export function useMinTrades() {
 
   return [minTrades, updatePlatform]
 }
+
+// "Over Weekend" per platform -- On/Off, whether that platform's accounts
+// are allowed to hold positions over the weekend. Per Tuan (2026-09-15):
+// same "just store it" scope as Min Trades above -- nothing reads this
+// yet. Same one-JSON-object-per-group shape as useMinTrades, just booleans
+// instead of counts; defaults to Off for all three (rather than guessing
+// any platform's actual weekend-holding rule).
+const OVER_WEEKEND_STORAGE_KEY = "overWeekendByPlatform"
+export const DEFAULT_OVER_WEEKEND = { RF: false, FTMO: false, AC: false }
+
+function readStoredOverWeekend() {
+  const raw = localStorage.getItem(OVER_WEEKEND_STORAGE_KEY)
+  if (!raw) return DEFAULT_OVER_WEEKEND
+  try {
+    const parsed = JSON.parse(raw)
+    return { ...DEFAULT_OVER_WEEKEND, ...parsed }
+  } catch {
+    return DEFAULT_OVER_WEEKEND
+  }
+}
+
+/**
+ * Over Weekend per platform (RF/FTMO/AC) -- see OVER_WEEKEND_STORAGE_KEY
+ * above. Same shape/persistence as useMinTrades: returns the full
+ * {RF, FTMO, AC} object plus a setter that updates one platform at a time.
+ */
+export function useOverWeekend() {
+  const [overWeekend, setOverWeekend] = useState(readStoredOverWeekend)
+
+  function updatePlatform(platform, value) {
+    const next = { ...overWeekend, [platform]: value }
+    setOverWeekend(next)
+    localStorage.setItem(OVER_WEEKEND_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  return [overWeekend, updatePlatform]
+}
