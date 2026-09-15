@@ -291,7 +291,19 @@ export function computeMainView(
       // Still nothing: if this account's only configured rule is
       // symbol-specific (no blanket rule to fall back to), show it anyway
       // rather than hide a real rule just because it's not currently open.
-      if (!fallback) {
+      // Bug fixed per Tuan (2026-09-15): this single-rule fallback is only
+      // valid when the account truly has NO open position at all
+      // (leftSymbols.length === 0 -- Symbol is "n/a") -- it exists so an
+      // account's one configured rule still shows Note/DD while nothing's
+      // open, per this block's own comment above. It was firing
+      // unconditionally instead, so an account with a REAL open position
+      // on a symbol nobody configured a rule for (e.g. RF-880-46585
+      // trading USD/CHF when its only rule is for AUD/CHF) silently
+      // borrowed that unrelated rule's B-side match -- pairing USD/CHF to
+      // tastyfx's AUD/CHF position instead of leaving it unmatched, which
+      // is how B PL/B Size ended up showing a completely different
+      // tastyfx position's numbers.
+      if (!fallback && leftSymbols.length === 0) {
         const accountRules = rulesByAccount.get(accountKey)
         if (accountRules && accountRules.length === 1) fallback = accountRules[0]
       }
