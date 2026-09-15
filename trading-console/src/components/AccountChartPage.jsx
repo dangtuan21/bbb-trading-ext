@@ -202,13 +202,16 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // showNoSl stays false, so nothing changes there.
           const hasStopLoss = noSlKey ? row[noSlKey] === "SL" || row[noSlKey] === "TP/SL" : true
           const showNoSl = isWarning && Boolean(noSlKey) && !hasStopLoss
-          // Reason shown INSIDE the bar itself (appended to whatever text
-          // the bar already carries -- the Symbol, or "No SL!" when that
-          // also applies), lower case, e.g. "AUD/CHF - weekend" or
-          // "No SL! - daily dd + weekend" -- not a separate badge floating
-          // outside the bar.
+          // Reason shown INSIDE the bar itself, lower case, brown, pinned to
+          // the bar's OUTER tip -- the far edge away from the shared center
+          // axis: the left edge for a left-growing (red) bar, the right
+          // edge for a right-growing (green) bar. The Symbol/"No SL!" text
+          // keeps its original position near the axis (barLeft ? justify-end
+          // : default-start on the bar div, unchanged) -- this is a second,
+          // independently-positioned span via `absolute`, not appended into
+          // that same string, so the two never fight over one alignment.
           const barInnerLabel = showNoSl ? "No SL!" : label
-          const barLabel = isWarning && reasonLabel ? `${barInnerLabel} - ${reasonLabel}` : barInnerLabel
+          const showReason = isWarning && Boolean(reasonLabel)
 
           return (
             <div key={`${row.A_Platform}|${row.A_AccountID}`} className="flex h-9 items-stretch">
@@ -218,9 +221,12 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
                     <div
                       style={{ width: `${widthPct}%` }}
-                      className={`flex h-6 min-w-8 items-center justify-end rounded-l bg-red-600 px-2${barBlinkClass}`}
+                      className={`relative flex h-6 min-w-8 items-center justify-end rounded-l bg-red-600 px-2${barBlinkClass}`}
                     >
-                      <span className="truncate text-xs font-bold text-white">{barLabel}</span>
+                      {showReason && (
+                        <span className="absolute left-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
+                      )}
+                      <span className="truncate text-xs font-bold text-white">{barInnerLabel}</span>
                     </div>
                   </>
                 ) : (
@@ -239,9 +245,12 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     <>
                       <div
                         style={{ width: `${widthPct}%` }}
-                        className={`flex h-6 min-w-8 items-center rounded-r ${positiveColorClass} px-2${barBlinkClass}`}
+                        className={`relative flex h-6 min-w-8 items-center rounded-r ${positiveColorClass} px-2${barBlinkClass}`}
                       >
-                        <span className="truncate text-xs font-bold text-white">{barLabel}</span>
+                        <span className="truncate text-xs font-bold text-white">{barInnerLabel}</span>
+                        {showReason && (
+                          <span className="absolute right-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
+                        )}
                       </div>
                       <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
                     </>
