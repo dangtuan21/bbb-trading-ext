@@ -75,8 +75,8 @@
             "match-B-position": "tastyfx|DTEN3|GBP/CAD"
         },
         {
-            "A-position": "RebelsFunding|RF-880-46585|AUD/CHF",
-            "match-B-position": "tastyfx|DTEN3|AUD/CHF"
+            "A-position": "RebelsFunding|RF-880-46585|USD/CHF",
+            "match-B-position": "tastyfx|DTEN3|USD/CHF"
         },
         {
             "A-position": "FTMO|650007509",
