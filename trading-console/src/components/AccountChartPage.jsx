@@ -224,7 +224,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                       className={`relative flex h-6 min-w-8 items-center justify-end rounded-l bg-red-600 px-2${barBlinkClass}`}
                     >
                       {showReason && (
-                        <span className="absolute left-2 text-[10px] font-semibold lowercase animate-chart-reason-blink">{reasonLabel}</span>
+                        <span className="absolute left-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
                       )}
                       <span className="truncate text-xs font-bold text-white">{barInnerLabel}</span>
                     </div>
@@ -249,7 +249,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                       >
                         <span className="truncate text-xs font-bold text-white">{barInnerLabel}</span>
                         {showReason && (
-                          <span className="absolute right-2 text-[10px] font-semibold lowercase animate-chart-reason-blink">{reasonLabel}</span>
+                          <span className="absolute right-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
                         )}
                       </div>
                       <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
