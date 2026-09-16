@@ -75,12 +75,27 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
   const [error, setError] = useState(null)
   const busy = saving || deleting || hiding
 
+  // Multiple simultaneously-open positions render as one comma-joined
+  // string here (e.g. "AUD/NZD, GBP/CHF") -- but compute.js's matching
+  // (computeMainView's ruleMap) looks up each open symbol INDIVIDUALLY,
+  // never the joined string as one key, so a rule saved with the joined
+  // string as its A-Symbol can never match and silently never takes
+  // effect (no B-match, no Note, nothing -- confirmed live via
+  // RebelsFunding|RCF-407-42579|"AUD/CHF, EUR/CHF" and
+  // RebelsFunding|42026425387055|"GBP/CHF, NZD/CHF", both pre-existing
+  // entries whose Note never actually displayed). Save a blanket rule
+  // (no A-Symbol segment) instead whenever multiple symbols are open at
+  // once -- that tier (ruleMapByAccount) matches the account regardless
+  // of which symbol(s) happen to be open, which is what a multi-position
+  // note/rule almost always means in practice anyway.
+  const isMultiSymbol = symbol.includes(",")
+
   function buildPayload() {
     const bParts = bKey ? bKey.split("|") : null
     return {
       aPlatform: row.A_Platform,
       aAccountId: row.A_AccountID,
-      aSymbol: symbol.trim() || null,
+      aSymbol: isMultiSymbol ? null : symbol.trim() || null,
       originalASymbol,
       bPlatform: bParts ? bParts[0] : null,
       bAccountId: bParts ? bParts[1] : null,
