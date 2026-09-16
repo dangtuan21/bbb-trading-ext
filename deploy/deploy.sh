@@ -60,6 +60,22 @@ cd "$REMOTE_DIR"
 echo "--> git pull --ff-only origin main"
 git pull --ff-only origin main
 
+# git pull runs as root over this SSH session, so any tracked file it
+# touches comes back root-owned -- but ext-server.service runs as an
+# unprivileged user (see its User= directive) and needs write access to
+# both its canonical config.json and the public/data runtime mirror it
+# writes on every rule edit (see ext-server/server.js MATCH_RULES_CONFIG_FILE
+# / CONFIG_MIRROR_FILE). Re-chown both after every pull so the in-app rule
+# editor keeps working -- without this, a deploy that touches config.json
+# silently breaks live rule edits with EACCES until someone notices and
+# manually chowns it back (this happened on 2026-09-15).
+EXT_SERVER_USER="$(systemctl show ext-server.service -p User --value)"
+if [[ -n "$EXT_SERVER_USER" ]]; then
+  echo "--> re-chowning config.json to $EXT_SERVER_USER (ext-server.service's user)"
+  chown "$EXT_SERVER_USER":"$EXT_SERVER_USER" trading-console/src/data-fact/config.json
+  [[ -f trading-console/public/data/config.json ]] && chown "$EXT_SERVER_USER":"$EXT_SERVER_USER" trading-console/public/data/config.json
+fi
+
 echo "--> trading-console: npm install + build"
 cd trading-console
 npm install --no-audit --no-fund
