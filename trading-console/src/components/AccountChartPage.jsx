@@ -188,6 +188,11 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // self-explanatory on first read.
           const isTwoWay = Boolean(row.B_Platform)
           const showDirectionIcon = !isTwoWay
+          // 2-way accounts are the common/expected case (see the grouping
+          // above), so their label reads as plain black text; 1-way
+          // accounts keep the original muted gray, which -- together with
+          // the arrow icon above -- is what marks them as the exception.
+          const labelColorClass = isTwoWay ? "text-black" : "text-slate-400"
           const label = row.A_Symbol
           const pctLabel = formatPct(row[pctKey])
           // `warningKey` reads an already-computed boolean warning flag off
@@ -272,7 +277,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                   </>
                 ) : (
                   last4 && (
-                    <span className="shrink-0 pr-2 flex items-center gap-1 text-xs font-medium text-slate-400">
+                    <span className={`shrink-0 pr-2 flex items-center gap-1 text-xs font-medium ${labelColorClass}`}>
                       <span>{last4Label}</span>
                       {showDirectionIcon && (
                         <span className="text-[11px]" title="1-way (no hedge)">{"\u2192"}</span>
@@ -306,7 +311,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                   )
                 ) : (
                   last4 && (
-                    <span className="shrink-0 pl-2 flex items-center gap-1 text-xs font-medium text-slate-400">
+                    <span className={`shrink-0 pl-2 flex items-center gap-1 text-xs font-medium ${labelColorClass}`}>
                       {showDirectionIcon && (
                         <span className="text-[11px]" title="1-way (no hedge)">{"\u2192"}</span>
                       )}

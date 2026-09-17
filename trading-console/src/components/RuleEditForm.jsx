@@ -185,11 +185,22 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
     }
   }
 
+  // Wrapping the fields in a real <form> (Save as its type="submit"
+  // button, everything else type="button") gets Enter-to-save for free --
+  // hitting Enter while focused in the Symbol/Note text input (or the
+  // B-position select) fires the browser's native form submit instead of
+  // needing a manual keydown handler on each field.
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!busy) handleSave()
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
+      <form
         className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
       >
         <h3 className="text-base font-semibold text-slate-800">
           {row.A_Platform} · {row.A_AccountID}
@@ -270,8 +281,7 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
               Cancel
             </button>
             <button
-              type="button"
-              onClick={handleSave}
+              type="submit"
               disabled={busy}
               className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-700"
             >
@@ -279,7 +289,7 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
             </button>
           </div>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
