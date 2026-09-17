@@ -75,12 +75,17 @@ function minTradesKeyForPlatform(platform) {
  * "4343" sitting just left of the axis, right beside "EURUSD" just right of
  * it). Same side as the bar the pct label is already on, at the far end.
  *
- * Order: green rows (pct >= 0) first, highest at the very top and
+ * Order: 2-way (hedged) accounts as one top-level block before 1-way
+ * (unhedged) accounts -- 2-way is the common/default case, so it leads;
+ * 1-way is the exception, both by sitting after the 2-way block and by the
+ * arrow icon rendered next to its label (see isTwoWay/showDirectionIcon
+ * below). WITHIN each of those two blocks, the original ordering still
+ * applies: green rows (pct >= 0) first, highest at the very top and
  * descending from there; red rows after, lowest (biggest loss) immediately
- * below the green block and ascending toward 0 at the very bottom -- so
- * both "how good is the best account" and "how bad is the worst account"
- * read off the two ends of the chart nearest the green/red boundary, not
- * one single top-to-bottom ranking across both colors.
+ * below the green sub-block and ascending toward 0 at the bottom of that
+ * block -- so both "how good is the best account" and "how bad is the
+ * worst account" still read off the two ends of each block nearest its own
+ * green/red boundary.
  */
 export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveColorClass = "bg-emerald-600", growLeft = false, scaleMax = 100, scaleMaxKey, warningKey, warningLabel = "dd", extraWarningKey, extraWarningLabel = "weekend", noSlKey }) {
   const [minTrades] = useMinTrades()
@@ -93,9 +98,20 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
   }
 
   const values = rows.map((row) => ({ row, pct: parseFloat(row[pctKey]) }))
-  const greens = values.filter((v) => v.pct >= 0).sort((a, b) => b.pct - a.pct)
-  const reds = values.filter((v) => v.pct < 0).sort((a, b) => a.pct - b.pct)
-  const sorted = [...greens, ...reds]
+  // Green-then-red-by-pct (see module doc above), but applied within two
+  // top-level groups first: 2-way (hedged) accounts before 1-way accounts
+  // -- 2-way is the common/default case, so it leads; 1-way accounts (the
+  // exception -- no matched B-position, see B_Platform) are called out
+  // both by sitting after the 2-way block AND by the arrow icon rendered
+  // next to their label below.
+  const byPctGroups = (list) => {
+    const greens = list.filter((v) => v.pct >= 0).sort((a, b) => b.pct - a.pct)
+    const reds = list.filter((v) => v.pct < 0).sort((a, b) => a.pct - b.pct)
+    return [...greens, ...reds]
+  }
+  const twoWayValues = values.filter((v) => Boolean(v.row.B_Platform))
+  const oneWayValues = values.filter((v) => !v.row.B_Platform)
+  const sorted = [...byPctGroups(twoWayValues), ...byPctGroups(oneWayValues)]
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -162,18 +178,16 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           const last4Label = accountLabel && minTradesValue > 0
             ? accountLabel + " (" + (row.A_TotalTrades || 0) + "/" + minTradesValue + ")"
             : accountLabel
-          // "1 way" (A-side only, no matched hedge) vs "2 way" (A matched
-          // to a B-side position -- see compute.js's B_Platform, "" when
-          // unmatched) shown as a tiny inline glyph right next to the
-          // account label: a plain arrow for 1-way (one leg, unhedged,
-          // neutral/gray same as the label itself), a double-headed arrow
-          // for 2-way (hedged, colored to stand out as "covered"). Title
-          // attribute carries the spelled-out meaning on hover since the
-          // glyph alone isn't self-explanatory on first read.
+          // "1 way" (A-side only, no matched hedge, see compute.js's
+          // B_Platform -- "" when unmatched) is the exception, not "2 way"
+          // (A matched to a B-side position) -- 2-way accounts are the
+          // common case (see the grouping above) and get no icon at all;
+          // only a 1-way account gets a plain arrow next to its label,
+          // flagging the thing worth noticing. Title attribute spells out
+          // the meaning on hover since the glyph alone isn't
+          // self-explanatory on first read.
           const isTwoWay = Boolean(row.B_Platform)
-          const directionIcon = isTwoWay ? "\u21c4" : "\u2192"
-          const directionColorClass = isTwoWay ? "text-emerald-500" : "text-slate-400"
-          const directionTitle = isTwoWay ? "2-way (hedged)" : "1-way (no hedge)"
+          const showDirectionIcon = !isTwoWay
           const label = row.A_Symbol
           const pctLabel = formatPct(row[pctKey])
           // `warningKey` reads an already-computed boolean warning flag off
@@ -260,7 +274,9 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                   last4 && (
                     <span className="shrink-0 pr-2 flex items-center gap-1 text-xs font-medium text-slate-400">
                       <span>{last4Label}</span>
-                      <span className={`text-[11px] ${directionColorClass}`} title={directionTitle}>{directionIcon}</span>
+                      {showDirectionIcon && (
+                        <span className="text-[11px]" title="1-way (no hedge)">{"\u2192"}</span>
+                      )}
                     </span>
                   )
                 )}
@@ -291,7 +307,9 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                 ) : (
                   last4 && (
                     <span className="shrink-0 pl-2 flex items-center gap-1 text-xs font-medium text-slate-400">
-                      <span className={`text-[11px] ${directionColorClass}`} title={directionTitle}>{directionIcon}</span>
+                      {showDirectionIcon && (
+                        <span className="text-[11px]" title="1-way (no hedge)">{"\u2192"}</span>
+                      )}
                       <span>{last4Label}</span>
                     </span>
                   )
