@@ -162,6 +162,18 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           const last4Label = accountLabel && minTradesValue > 0
             ? accountLabel + " (" + (row.A_TotalTrades || 0) + "/" + minTradesValue + ")"
             : accountLabel
+          // "1 way" (A-side only, no matched hedge) vs "2 way" (A matched
+          // to a B-side position -- see compute.js's B_Platform, "" when
+          // unmatched) shown as a tiny inline glyph right next to the
+          // account label: a plain arrow for 1-way (one leg, unhedged,
+          // neutral/gray same as the label itself), a double-headed arrow
+          // for 2-way (hedged, colored to stand out as "covered"). Title
+          // attribute carries the spelled-out meaning on hover since the
+          // glyph alone isn't self-explanatory on first read.
+          const isTwoWay = Boolean(row.B_Platform)
+          const directionIcon = isTwoWay ? "\u21c4" : "\u2192"
+          const directionColorClass = isTwoWay ? "text-emerald-500" : "text-slate-400"
+          const directionTitle = isTwoWay ? "2-way (hedged)" : "1-way (no hedge)"
           const label = row.A_Symbol
           const pctLabel = formatPct(row[pctKey])
           // `warningKey` reads an already-computed boolean warning flag off
@@ -245,7 +257,12 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     </div>
                   </>
                 ) : (
-                  last4 && <span className="shrink-0 pr-2 text-xs font-medium text-slate-400">{last4Label}</span>
+                  last4 && (
+                    <span className="shrink-0 pr-2 flex items-center gap-1 text-xs font-medium text-slate-400">
+                      <span>{last4Label}</span>
+                      <span className={`text-[11px] ${directionColorClass}`} title={directionTitle}>{directionIcon}</span>
+                    </span>
+                  )
                 )}
               </div>
               <div className="w-px shrink-0 self-stretch bg-slate-300" />
@@ -272,7 +289,12 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                     </>
                   )
                 ) : (
-                  last4 && <span className="shrink-0 pl-2 text-xs font-medium text-slate-400">{last4Label}</span>
+                  last4 && (
+                    <span className="shrink-0 pl-2 flex items-center gap-1 text-xs font-medium text-slate-400">
+                      <span className={`text-[11px] ${directionColorClass}`} title={directionTitle}>{directionIcon}</span>
+                      <span>{last4Label}</span>
+                    </span>
+                  )
                 )}
               </div>
             </div>
