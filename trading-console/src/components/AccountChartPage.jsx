@@ -193,6 +193,13 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // accounts keep the original muted gray, which -- together with
           // the arrow icon above -- is what marks them as the exception.
           const labelColorClass = isTwoWay ? "text-black" : "text-slate-400"
+          // Same reasoning as labelColorClass above, applied to the %
+          // figure (e.g. "0.6%") that sits beside the bar on the opposite
+          // side from the account label -- 2-way's default/expected case
+          // reads as plain black; 1-way keeps each spot's original muted
+          // gray (text-slate-600 next to a bar, text-slate-400 for the
+          // isZero no-bar case).
+          const pctColorClass = isTwoWay ? "text-black" : null
           const label = row.A_Symbol
           const pctLabel = formatPct(row[pctKey])
           // `warningKey` reads an already-computed boolean warning flag off
@@ -263,7 +270,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
               <div className="flex flex-1 items-center justify-end gap-2">
                 {barLeft ? (
                   <>
-                    <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
+                    <span className={`shrink-0 text-xs tabular-nums ${pctColorClass || "text-slate-600"}`}>{pctLabel}</span>
                     <div
                       style={{ width: `${widthPct}%` }}
                       className="relative flex h-6 min-w-8 items-center justify-end"
@@ -292,7 +299,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                   isZero ? (
                     <>
                       <span className="truncate pl-2 text-xs font-medium text-slate-500">{label}</span>
-                      <span className="shrink-0 text-xs tabular-nums text-slate-400">{pctLabel}</span>
+                      <span className={`shrink-0 text-xs tabular-nums ${pctColorClass || "text-slate-400"}`}>{pctLabel}</span>
                     </>
                   ) : (
                     <>
@@ -306,7 +313,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                           <span className="absolute right-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
                         )}
                       </div>
-                      <span className="shrink-0 text-xs tabular-nums text-slate-600">{pctLabel}</span>
+                      <span className={`shrink-0 text-xs tabular-nums ${pctColorClass || "text-slate-600"}`}>{pctLabel}</span>
                     </>
                   )
                 ) : (
