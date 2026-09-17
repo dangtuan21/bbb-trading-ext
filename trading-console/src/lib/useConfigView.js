@@ -19,11 +19,28 @@ async function loadConfig() {
   return { matchRules: parseMatchRules(json), hiddenAccounts: parseHiddenAccounts(json) }
 }
 
+// Fired (via notifyConfigChanged, below) whenever something writes to
+// config.json through the API -- RuleEditForm's Save/Delete/Hide, so far.
+// useConfigView listens for it below and re-fetches. Without this, saving a
+// rule closed the modal but the grid underneath (AccountViewPage/
+// MarketViewPage/AccountChartsPage, all still mounted the whole time the
+// modal was open) kept showing whatever matchRules/hiddenAccounts it
+// fetched on its own original mount -- the edit was live in config.json and
+// would show up on the next manual page reload, just not right away. A
+// plain window event (rather than e.g. lifting state to App.jsx) is what
+// lets every currently-mounted useConfigView() instance pick it up without
+// RuleEditForm needing to know who's listening.
+const CONFIG_CHANGED_EVENT = "bbb:config-changed"
+
+export function notifyConfigChanged() {
+  window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT))
+}
+
 /**
  * useConfigView(): loads match-rules/hidden-accounts from config.json's
  * runtime mirror (data/config.json, written by ext-server alongside the
  * canonical src/data-fact/config.json -- see server.js's CONFIG_MIRROR_FILE),
- * fetched fresh on every mount.
+ * fetched on mount and again every time notifyConfigChanged() fires.
  *
  * matchRules.js/hiddenAccounts.js ALSO export `matchRules`/`hiddenAccounts`
  * as a static, build-time-only snapshot: Vite inlines config.json's content
@@ -45,21 +62,27 @@ export function useConfigView() {
   useEffect(() => {
     let cancelled = false
 
-    loadConfig()
-      .then(({ matchRules, hiddenAccounts }) => {
-        if (cancelled) return
-        setMatchRules(matchRules)
-        setHiddenAccounts(hiddenAccounts)
-        setStatus("ready")
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setError(err.message)
-        setStatus("error")
-      })
+    function refresh() {
+      loadConfig()
+        .then(({ matchRules, hiddenAccounts }) => {
+          if (cancelled) return
+          setMatchRules(matchRules)
+          setHiddenAccounts(hiddenAccounts)
+          setStatus("ready")
+        })
+        .catch((err) => {
+          if (cancelled) return
+          setError(err.message)
+          setStatus("error")
+        })
+    }
+
+    refresh()
+    window.addEventListener(CONFIG_CHANGED_EVENT, refresh)
 
     return () => {
       cancelled = true
+      window.removeEventListener(CONFIG_CHANGED_EVENT, refresh)
     }
   }, [])
 

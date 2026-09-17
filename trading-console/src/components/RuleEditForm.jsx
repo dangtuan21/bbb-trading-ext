@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useAccountView } from "../lib/useAccountView"
+import { notifyConfigChanged } from "../lib/useConfigView"
 
 const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
 
@@ -115,6 +116,7 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
       })
       const result = await res.json()
       if (!result.ok) throw new Error(result.error || "Server rejected the update")
+      notifyConfigChanged()
       onSaved()
     } catch (err) {
       setError(`Could not save (${err.message}). Is ext-server running?`)
@@ -151,6 +153,7 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
       })
       const result = await res.json()
       if (!result.ok) throw new Error(result.error || "Server rejected the delete")
+      notifyConfigChanged()
       onSaved()
     } catch (err) {
       setError(`Could not delete (${err.message}). Is ext-server running?`)
@@ -173,6 +176,7 @@ export default function RuleEditForm({ row, onClose, onSaved }) {
       })
       const result = await res.json()
       if (!result.ok) throw new Error(result.error || "Server rejected the update")
+      notifyConfigChanged()
       onSaved()
     } catch (err) {
       setError(`Could not hide (${err.message}). Is ext-server running?`)
