@@ -6,7 +6,7 @@
             "A-DailyDrawdown": -2000
         },
         {
-            "A-position": "RebelsFunding|RF-205-43891|NZD/CHF",
+            "A-position": "RebelsFunding|RF-205-43891",
             "Note": "1 way"
         },
         {
@@ -109,7 +109,8 @@
         },
         {
             "A-position": "RebelsFunding|RF-412-47507|EUR/AUD",
-            "match-B-position": "tastyfx|DTEN3|EUR/AUD"
+            "match-B-position": "tastyfx|DTEN3|EUR/AUD",
+            "Note": "#2 trades"
         },
         {
             "A-position": "RebelsFunding|22026430966781|AUD/NZD",
@@ -125,7 +126,35 @@
         },
         {
             "A-position": "RebelsFunding|RF-412-47507|EUR/CHF",
-            "match-B-position": "tastyfx|DTEN3|EUR/CHF"
+            "match-B-position": "tastyfx|DTEN3|EUR/CHF",
+            "Note": "11"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|EUR/AUD",
+            "match-B-position": "tastyfx|DTEN3|EUR/AUD"
+        },
+        {
+            "A-position": "RebelsFunding|22026427572022|GBP/CHF",
+            "Note": "1 way"
+        },
+        {
+            "A-position": "RebelsFunding|RFR-509-47206|GBP/CHF",
+            "match-B-position": "tastyfx|DTEN3|GBP/CHF",
+            "Note": "B: -360"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|AUD/NZD",
+            "match-B-position": "tastyfx|DTEN3|AUD/NZD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CHF",
+            "match-B-position": "tastyfx|DTEN3|AUD/CHF",
+            "Note": "#5 trades"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|NZD/CAD",
+            "match-B-position": "tastyfx|DTEN3|NZD/CAD",
+            "Note": "5 trades"
         }
     ],
     "hidden-accounts": [
