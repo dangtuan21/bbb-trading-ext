@@ -1,0 +1,165 @@
+{
+    "position-rule": [
+        {
+            "A-position": "RebelsFunding|RF-749-44029|USD/CAD",
+            "match-B-position": "tastyfx|DTEN3|USD/CAD",
+            "A-DailyDrawdown": -2000
+        },
+        {
+            "A-position": "RebelsFunding|RF-205-43891",
+            "Note": "1 way"
+        },
+        {
+            "A-position": "RebelsFunding|42026425387055",
+            "Note": "1 way"
+        },
+        {
+            "A-position": "RebelsFunding|42026424057054|NZD/CAD",
+            "match-B-position": "tastyfx|DTEN3|NZD/CAD",
+            "A-DailyDrawdown": -2000
+        },
+        {
+            "A-position": "RebelsFunding|12026404876211|GBP/CHF",
+            "A-DailyDrawdown": -500,
+            "Note": "1 way"
+        },
+        {
+            "A-position": "RebelsFunding|RCF-407-42579",
+            "Note": "1 way"
+        },
+        {
+            "A-position": "FTMO|650005965|AUD/CHF",
+            "A-DailyDrawdown": -500,
+            "Note": "win, review 2 days"
+        },
+        {
+            "A-position": "RebelsFunding|RF-029-45036|GBP/CHF",
+            "match-B-position": "tastyfx|DTEN3|GBP/CHF",
+            "A-DailyDrawdown": -2000
+        },
+        {
+            "A-position": "RebelsFunding|22026427572022|EUR/GBP",
+            "match-B-position": "tastyfx|DTEN3|EUR/GBP"
+        },
+        {
+            "A-position": "RebelsFunding|RF-054-45234|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/CAD"
+        },
+        {
+            "A-position": "FTMO|650006975",
+            "match-B-position": "tastyfx|DTEN3|AUD/USD",
+            "Note": "Reviewing contract"
+        },
+        {
+            "A-position": "FTMO|n/a",
+            "Note": "Not sufficient equity"
+        },
+        {
+            "A-position": "RebelsFunding|22026429113565|EUR/AUD",
+            "match-B-position": "tastyfx|DTEN3|EUR/AUD"
+        },
+        {
+            "A-position": "RebelsFunding|22026429632526|GBP/USD",
+            "match-B-position": "tastyfx|DTEN3|GBP/USD"
+        },
+        {
+            "A-position": "RebelsFunding|22026429641325|EUR/USD",
+            "match-B-position": "tastyfx|DTEN3|EUR/USD"
+        },
+        {
+            "A-position": "RebelsFunding|22026429775880|NZD/USD",
+            "match-B-position": "tastyfx|DTEN3|NZD/USD"
+        },
+        {
+            "A-position": "RebelsFunding|RF-325-46378|GBP/CAD",
+            "match-B-position": "tastyfx|DTEN3|GBP/CAD"
+        },
+        {
+            "A-position": "RebelsFunding|RF-880-46585|AUD/CHF",
+            "match-B-position": "tastyfx|DTEN3|AUD/CHF"
+        },
+        {
+            "A-position": "FTMO|650007509",
+            "match-B-position": "tastyfx|DTEN3|NZD/USD",
+            "Note": "payout remain days=4"
+        },
+        {
+            "A-position": "RebelsFunding|22026430963412|EUR/NZD",
+            "match-B-position": "tastyfx|DTEN3|EUR/NZD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/CAD"
+        },
+        {
+            "A-position": "RebelsFunding|22026431312776|EUR/USD",
+            "match-B-position": "tastyfx|DTEN3|EUR/USD"
+        },
+        {
+            "A-position": "RebelsFunding|RF-526-47206|AUD/NZD",
+            "match-B-position": "tastyfx|DTEN3|AUD/NZD"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|AUD/CHF",
+            "match-B-position": "tastyfx|DTEN3|AUD/CHF"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CAD",
+            "match-B-position": "tastyfx|DTEN3|AUD/USD"
+        },
+        {
+            "A-position": "RebelsFunding|RF-412-47507|EUR/AUD",
+            "match-B-position": "tastyfx|DTEN3|EUR/AUD",
+            "Note": "#2 trades"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/NZD",
+            "match-B-position": "tastyfx|DTEN3|AUD/NZD"
+        },
+        {
+            "A-position": "FTMO|650009427|AUD/CHF",
+            "Note": "1 way, Close on Fri"
+        },
+        {
+            "A-position": "RebelsFunding|RF-880-46585|USD/CHF",
+            "match-B-position": "tastyfx|DTEN3|USD/CHF"
+        },
+        {
+            "A-position": "RebelsFunding|RF-412-47507|EUR/CHF",
+            "match-B-position": "tastyfx|DTEN3|EUR/CHF",
+            "Note": "11"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|EUR/AUD",
+            "match-B-position": "tastyfx|DTEN3|EUR/AUD"
+        },
+        {
+            "A-position": "RebelsFunding|22026427572022|GBP/CHF",
+            "Note": "1 way"
+        },
+        {
+            "A-position": "RebelsFunding|RFR-509-47206|GBP/CHF",
+            "match-B-position": "tastyfx|DTEN3|GBP/CHF",
+            "Note": "B: -360"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|AUD/NZD",
+            "match-B-position": "tastyfx|DTEN3|AUD/NZD"
+        },
+        {
+            "A-position": "RebelsFunding|22026430966781|AUD/CHF",
+            "match-B-position": "tastyfx|DTEN3|AUD/CHF",
+            "Note": "#5 trades"
+        },
+        {
+            "A-position": "RebelsFunding|22026431551303|NZD/CAD",
+            "match-B-position": "tastyfx|DTEN3|NZD/CAD",
+            "Note": "5 trades"
+        }
+    ],
+    "hidden-accounts": [
+        "AlphaCapital|5103701",
+        "FTMO|n/a"
+    ],
+    "schedule-interval": "60m"
+}
