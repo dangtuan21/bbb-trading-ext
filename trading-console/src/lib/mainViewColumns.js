@@ -86,11 +86,13 @@ export const MAINVIEW_COLUMNS = [
   // list -- see Phase in ext-rebelsfunding/background.js); blank for
   // FTMO/AlphaCapital rows.
   { key: "A_Phase", label: "A Phase" },
-  // Total number of trades the account has made -- from RF Client Zone's
-  // "Show Detailed Statistics > Consistency Score > Basic Metrics" card
-  // (RebelsFunding-only, same as A_Phase; see fnScrapeTotalTrades in
-  // ext-rebelsfunding/background.js). Blank for FTMO/AlphaCapital/tastyfx
-  // rows and for RebelsFunding accounts that haven't unlocked that card yet.
+  // NOT a raw trade count -- the number of CLOSED trades (RF Client
+  // Zone's Charts page > Closed Trades tab) whose |P/L %| > 0.8, i.e.
+  // trades big enough to count as a real move rather than a scratch/
+  // near-zero one (Tuan, 2026-09-18; see
+  // fnScrapeClosedTradesPagePlPercents in ext-rebelsfunding/background.js
+  // for the actual formula). RebelsFunding-only, same as A_Phase. Blank
+  // for FTMO/AlphaCapital/tastyfx rows.
   { key: "A_TotalTrades", label: "A Trades", numeric: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Dir" },

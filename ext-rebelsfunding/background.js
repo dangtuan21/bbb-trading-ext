@@ -378,20 +378,111 @@ function fnClickStatisticsCard() {
   return { clicked: false };
 }
 
-// Reads "Positions Count" off the Charts page fnClickStatisticsCard routes
-// to. Same tolerant "label line, value on the next line" read as
-// fnScrapeContestStats, plus a debug context dump so a wording/layout
-// change can be read off directly instead of guessed blind.
-function fnScrapePositionsCount() {
-  const text = document.body.innerText || document.body.textContent || '';
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const idx = lines.findIndex((l) => l.toUpperCase() === 'POSITIONS COUNT');
-  const raw = idx >= 0 && idx + 1 < lines.length ? lines[idx + 1] : '';
-  const m = /-?\d+/.exec(raw);
-  return {
-    positionsCount: m ? m[0] : '',
-    context: idx < 0 ? lines.slice(0, 24) : null,
-  };
+// Total Trades used to be "Positions Count" off this same Charts page (a
+// raw count of every closed trade, win or lose, however small) -- replaced
+// per Tuan (2026-09-18): a string of near-zero-P/L% scratch trades was
+// inflating that count without reflecting anything meaningful about actual
+// trading activity. Now counts Closed Trades rows whose |P/L %| > 0.8%
+// instead (see fnScrapeClosedTradesPagePlPercents/fnClickClosedTradesTab/
+// fnClickClosedTradesNextPage below, and the orchestration in
+// scrapeAccount that drives them across every paginator page).
+
+// Clicks the "Closed Trades" tab (the Charts page's default tab, per a
+// live screenshot -- but explicit rather than assumed, since a stale
+// selection from whatever tab a previous account's scrape left active
+// could otherwise leak into this one). Same click-simulation pattern as
+// fnClickStatisticsCard (a real pointerdown/mousedown/pointerup/mouseup/
+// click sequence, not el.click() -- see that function's own history for
+// why a synthetic click alone isn't reliable here).
+function fnClickClosedTradesTab() {
+  function simulateClick(el) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      const Ctor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+      el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }
+  }
+  const all = document.querySelectorAll('body *');
+  for (const el of all) {
+    if (el.children.length === 0 && el.textContent.trim() === 'Closed Trades') {
+      simulateClick(el.closest('button') || el);
+      return { clicked: true };
+    }
+  }
+  return { clicked: false };
+}
+
+// Finds the Closed Trades results table by its HEADER TEXT ("Order
+// number" + "P/L %" columns), not by position among the page's <table>
+// elements -- the Charts page also has a Symbols-ratio breakdown table
+// with its own "P/L %" column (Symbol/Trades/Wins/Losses/P/L/P/L%), so
+// index alone would silently read the wrong table. Reads every row's
+// "P/L %" cell on the CURRENT paginator page only -- see
+// fnClickClosedTradesNextPage for advancing to the next one.
+// `firstOrderNumber` lets the caller detect a click that didn't actually
+// advance the page (same first row as before) instead of double-counting.
+function fnScrapeClosedTradesPagePlPercents() {
+  const tables = document.querySelectorAll('table');
+  for (const t of tables) {
+    const headers = Array.from(t.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+    if (!headers.includes('Order number') || !headers.includes('P/L %')) continue;
+    const plIdx = headers.indexOf('P/L %');
+    const rows = Array.from(t.querySelectorAll('tbody tr'));
+    const values = rows.map((tr) => {
+      const cells = tr.querySelectorAll('td');
+      const raw = cells[plIdx] ? cells[plIdx].textContent.trim() : '';
+      const n = parseFloat(raw.replace('%', '').replace(',', ''));
+      return Number.isFinite(n) ? n : null;
+    });
+    const firstCells = rows[0] ? rows[0].querySelectorAll('td') : null;
+    return {
+      found: true,
+      values,
+      firstOrderNumber: firstCells && firstCells[1] ? firstCells[1].textContent.trim() : null,
+    };
+  }
+  return { found: false, values: [], firstOrderNumber: null };
+}
+
+// Clicks the Closed Trades table's PrimeReact paginator "next page" button
+// (".p-paginator-next", a sibling of the table rather than a descendant --
+// walks up to their shared container to find it). Returns clicked:false
+// once it carries "p-disabled" (or the .disabled property), i.e. this
+// already is the last page -- callers stop the loop on that, not on a
+// fixed page count, so an account with more Closed Trades than one page
+// (25 rows by default) still gets counted in full.
+function fnClickClosedTradesNextPage() {
+  function simulateClick(el) {
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      const Ctor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+      el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }
+  }
+  const tables = document.querySelectorAll('table');
+  let targetTable = null;
+  for (const t of tables) {
+    const headers = Array.from(t.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+    if (headers.includes('Order number') && headers.includes('P/L %')) { targetTable = t; break; }
+  }
+  if (!targetTable) return { clicked: false, reason: 'table-not-found' };
+  let container = targetTable.parentElement;
+  let nextBtn = null;
+  for (let i = 0; i < 6 && container; i++) {
+    nextBtn = container.querySelector('.p-paginator-next');
+    if (nextBtn) break;
+    container = container.parentElement;
+  }
+  if (!nextBtn) return { clicked: false, reason: 'paginator-not-found' };
+  if (nextBtn.classList.contains('p-disabled') || nextBtn.disabled) {
+    return { clicked: false, reason: 'last-page' };
+  }
+  simulateClick(nextBtn);
+  return { clicked: true };
 }
 
 // Navigates back off the Charts page (an in-app route push, not a full
@@ -931,26 +1022,50 @@ async function scrapeAccount(scanTabId, acc) {
   const balance = money(details?.balance || acc.balance);
   let equity = money(details?.equity || '');
 
-  // Total Trades (Positions Count) lives on this same Details page's
-  // "Statistics" card -- click it, read Positions Count off the Charts
-  // page it routes to, then navigate back so the rest of this function
-  // (RF-Trader Login click, etc.) resumes on the Details page as before.
-  // See fnClickStatisticsCard's comment for why this replaced the old
-  // "Show Detailed Statistics" accordion.
+  // Total Trades ("A Trades") lives on this same Details page's
+  // "Statistics" card -- click it, land on the Charts page, select Closed
+  // Trades (its default tab, but selected explicitly rather than assumed),
+  // then count that table's rows across every paginator page where
+  // |P/L %| > 0.8 (Tuan, 2026-09-18 -- see fnScrapeClosedTradesPagePlPercents'
+  // comment for why this replaced the old raw Positions Count read), then
+  // navigate back so the rest of this function (RF-Trader Login click,
+  // etc.) resumes on the Details page as before.
   let totalTrades = '';
   let totalTradesDiag = null;
   const statsCardClickResult = await execInTab(scanTabId, fnClickStatisticsCard).catch(() => null);
   if (statsCardClickResult?.clicked) {
     await waitForTextInTab(scanTabId, 'Profit balance', 8000);
-    let positionsCountResult = await execInTab(scanTabId, fnScrapePositionsCount).catch(() => null);
-    for (let attempt = 0; attempt < 2 && !positionsCountResult?.positionsCount; attempt++) {
-      await sleep(1500);
-      positionsCountResult = await execInTab(scanTabId, fnScrapePositionsCount).catch(() => null);
+    await execInTab(scanTabId, fnClickClosedTradesTab).catch(() => {});
+    await sleep(500);
+    const plPercents = [];
+    let pageFound = false;
+    let lastFirstOrderNumber = null;
+    // 50-page safety cap (mirrors this file's other bounded retry loops) --
+    // in practice every account seen so far fits on one 25-row page, this
+    // just keeps a genuinely high-volume account from counting in full
+    // instead of silently truncating at page 1.
+    for (let page = 0; page < 50; page++) {
+      let pageResult = await execInTab(scanTabId, fnScrapeClosedTradesPagePlPercents).catch(() => null);
+      for (let attempt = 0; attempt < 2 && !pageResult?.found; attempt++) {
+        await sleep(800);
+        pageResult = await execInTab(scanTabId, fnScrapeClosedTradesPagePlPercents).catch(() => null);
+      }
+      if (!pageResult?.found) break;
+      pageFound = true;
+      // Guards against double-counting: a next-page click that hadn't
+      // actually re-rendered yet (or a paginator that reported "last page"
+      // incorrectly) would otherwise re-read the same rows a second time.
+      if (page > 0 && pageResult.firstOrderNumber === lastFirstOrderNumber) break;
+      lastFirstOrderNumber = pageResult.firstOrderNumber;
+      plPercents.push(...pageResult.values);
+      const nextResult = await execInTab(scanTabId, fnClickClosedTradesNextPage).catch(() => null);
+      if (!nextResult?.clicked) break;
+      await sleep(600);
     }
-    if (positionsCountResult?.positionsCount) {
-      totalTrades = positionsCountResult.positionsCount;
+    if (pageFound) {
+      totalTrades = String(plPercents.filter((v) => v !== null && Math.abs(v) > 0.8).length);
     } else {
-      totalTradesDiag = { reason: 'positions-count-not-found', context: positionsCountResult?.context };
+      totalTradesDiag = { reason: 'closed-trades-table-not-found' };
     }
     await execInTab(scanTabId, fnGoBack).catch(() => {});
     await waitForTextInTab(scanTabId, 'Balance', 8000);
