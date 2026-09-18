@@ -18,9 +18,40 @@ const SERVER_URL = 'https://moreleadnow.com/api/ext';
 // (see deploy/README.md, step 6) -- keep this repo private, this is the
 // only thing standing between the internet and your account balances.
 const SERVER_AUTH = 'Basic ' + btoa('tuan:ngvM4rSEHBYZTXkS5R9b');
+// config.json's runtime mirror (see trading-console/src/lib/useConfigView.js
+// and ext-server's CONFIG_MIRROR_FILE) -- public, no Authorization header,
+// same file RuleEditForm's rules and SettingsPage's "Trade Min PL %" field
+// both read/write. Read here (not SERVER_URL's /api/ext) since that's the
+// one place this value is actually mirrored to the browser/extension.
+const CONFIG_MIRROR_URL = 'https://moreleadnow.com/data/config.json';
 const SCAN_WINDOW = { width: 2400, height: 1200 };
 const TAB_LOAD_TIMEOUT_MS = 20000;
 const RF_TRADER_TAB_TIMEOUT_MS = 10000;
+// Fallback used whenever config.json is unreachable, missing the key, or
+// holds something non-numeric -- keeps a scan from silently counting EVERY
+// closed trade (tradeMinPlPct=0 would do that) just because the mirror had
+// a hiccup. Matches SettingsPage's own default so a first-run account with
+// nothing saved yet behaves the same on both sides.
+const DEFAULT_TRADE_MIN_PL_PCT = 0.5;
+
+// Fetched once per scan (not per account -- see its call site in the scan
+// loop below), not injected into any page: this is a plain cross-origin
+// fetch from the extension's own service worker, which manifest.json's
+// host_permissions for moreleadnow.com already allows without a page
+// context. Falls back to DEFAULT_TRADE_MIN_PL_PCT on any failure (network
+// error, missing key, non-numeric value) rather than letting a config.json
+// hiccup block or skew an entire scan.
+async function fnFetchTradeMinPlPct() {
+  try {
+    const res = await fetch(CONFIG_MIRROR_URL, { cache: 'no-store' });
+    if (!res.ok) return DEFAULT_TRADE_MIN_PL_PCT;
+    const json = await res.json();
+    const n = Number(json?.['trade-min-pl-pct']);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_TRADE_MIN_PL_PCT;
+  } catch {
+    return DEFAULT_TRADE_MIN_PL_PCT;
+  }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -382,10 +413,17 @@ function fnClickStatisticsCard() {
 // raw count of every closed trade, win or lose, however small) -- replaced
 // per Tuan (2026-09-18): a string of near-zero-P/L% scratch trades was
 // inflating that count without reflecting anything meaningful about actual
-// trading activity. Now counts Closed Trades rows whose |P/L %| > 0.8%
-// instead (see fnScrapeClosedTradesPagePlPercents/fnClickClosedTradesTab/
+// trading activity. Now counts Closed Trades rows whose |P/L %| exceeds
+// the "Trade Min PL %" Settings threshold instead (see
+// fnScrapeClosedTradesPagePlPercents/fnClickClosedTradesTab/
 // fnClickClosedTradesNextPage below, and the orchestration in
-// scrapeAccount that drives them across every paginator page).
+// scrapeAccount that drives them across every paginator page). That
+// threshold itself is read from config.json's "trade-min-pl-pct" once per
+// scan (see fnFetchTradeMinPlPct and its call site below) -- it's set on
+// the trading-console dashboard, a different browser context from this
+// extension with no shared localStorage, so config.json (already fetched
+// cross-origin at moreleadnow.com/data/config.json, the same mirror
+// RuleEditForm's rules live in) is the only channel between the two.
 
 // Clicks the "Closed Trades" tab (the Charts page's default tab, per a
 // live screenshot -- but explicit rather than assumed, since a stale
@@ -936,7 +974,7 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
   };
 }
 
-async function scrapeAccount(scanTabId, acc) {
+async function scrapeAccount(scanTabId, acc, tradeMinPlPct) {
   await chrome.tabs.update(scanTabId, { url: REBELSFUNDING_URL });
   await waitForTabComplete(scanTabId);
   await waitForTextInTab(scanTabId, 'Details', 10000);
@@ -1026,10 +1064,12 @@ async function scrapeAccount(scanTabId, acc) {
   // "Statistics" card -- click it, land on the Charts page, select Closed
   // Trades (its default tab, but selected explicitly rather than assumed),
   // then count that table's rows across every paginator page where
-  // |P/L %| > 0.8 (Tuan, 2026-09-18 -- see fnScrapeClosedTradesPagePlPercents'
-  // comment for why this replaced the old raw Positions Count read), then
-  // navigate back so the rest of this function (RF-Trader Login click,
-  // etc.) resumes on the Details page as before.
+  // |P/L %| > tradeMinPlPct (the caller's config.json-sourced "Trade Min
+  // PL %" setting, defaulting to 0.5 -- Tuan, 2026-09-18; see
+  // fnScrapeClosedTradesPagePlPercents' comment for why this replaced the
+  // old raw Positions Count read), then navigate back so the rest of this
+  // function (RF-Trader Login click, etc.) resumes on the Details page as
+  // before.
   let totalTrades = '';
   let totalTradesDiag = null;
   const statsCardClickResult = await execInTab(scanTabId, fnClickStatisticsCard).catch(() => null);
@@ -1063,7 +1103,7 @@ async function scrapeAccount(scanTabId, acc) {
       await sleep(600);
     }
     if (pageFound) {
-      totalTrades = String(plPercents.filter((v) => v !== null && Math.abs(v) > 0.8).length);
+      totalTrades = String(plPercents.filter((v) => v !== null && Math.abs(v) > tradeMinPlPct).length);
     } else {
       totalTradesDiag = { reason: 'closed-trades-table-not-found' };
     }
@@ -1267,11 +1307,16 @@ async function runFullScan() {
       }
     }
 
+    // Fetched once for the whole scan, not per account -- "Trade Min PL %"
+    // doesn't change mid-scan, and every account's Total Trades count
+    // should be measured against the same threshold anyway.
+    const tradeMinPlPct = await fnFetchTradeMinPlPct();
+
     const active = allAccounts.filter((a) => a.status === 'Active');
     const rows = [];
     for (const acc of active) {
       try {
-        const result = await scrapeAccount(scanTabId, acc);
+        const result = await scrapeAccount(scanTabId, acc, tradeMinPlPct);
         rows.push(...result.rows);
         if (result.diag) diagnostics.push({ account: acc.account, ...result.diag });
       } catch (err) {

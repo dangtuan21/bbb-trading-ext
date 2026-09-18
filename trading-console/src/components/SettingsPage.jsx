@@ -8,6 +8,7 @@ import {
   useMinTrades,
   useOverWeekend,
 } from "../lib/settings"
+import { useConfigView, notifyConfigChanged } from "../lib/useConfigView"
 
 const SERVER_URL = import.meta.env.DEV ? "http://127.0.0.1:8765" : "/api/ext"
 
@@ -160,6 +161,91 @@ function OverWeekendSection() {
           value={overWeekend.AC}
           onChange={(v) => setOverWeekendPlatform("AC", v)}
         />
+      </div>
+    </div>
+  )
+}
+
+// Trade Min PL % -- the |P/L %| threshold
+// ext-rebelsfunding/background.js uses when counting a RebelsFunding
+// account's Closed Trades toward "A Trades" (a closed trade at or below
+// this is treated as a scratch/near-zero close, not counted -- see that
+// file's fnFetchTradeMinPlPct). Deliberately NOT a localStorage setting
+// like ThresholdField's warning thresholds above: the extension is a
+// separate browser context (a service worker) with no access to this
+// page's localStorage at all, so this has to be readable by IT -- it's
+// persisted in config.json instead (the same file RuleEditForm's rules
+// and Hide/Unhide already write to, and the one file the extension
+// already fetches cross-origin at moreleadnow.com/data/config.json), via
+// POST /config/trade-min-pl-pct, then notifyConfigChanged() so every
+// mounted useConfigView() (including this field itself, on another
+// browser tab) picks up the new value immediately -- same refresh
+// mechanism RuleEditForm's Save/Delete/Hide use.
+function TradeMinPlSection() {
+  const { tradeMinPlPct } = useConfigView()
+  const [text, setText] = useState(String(tradeMinPlPct))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Keeps the field in sync with config.json even when THIS instance
+  // didn't cause the change (another tab's save, or the initial fetch
+  // resolving after the static build-time default already rendered) --
+  // ThresholdField's simpler localStorage-only fields never need this
+  // since they have no such external source to reconcile against.
+  useEffect(() => {
+    setText(String(tradeMinPlPct))
+  }, [tradeMinPlPct])
+
+  async function commit(raw) {
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n <= 0 || n > 100) {
+      setText(String(tradeMinPlPct))
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`${SERVER_URL}/config/trade-min-pl-pct`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: n }),
+      })
+      const result = await res.json()
+      if (!result.ok) throw new Error(result.error || "Server rejected the update")
+      notifyConfigChanged()
+      setText(String(n))
+    } catch (err) {
+      setError(`Could not save (${err.message}). Is ext-server running?`)
+      setText(String(tradeMinPlPct))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-[200px_1fr] items-center gap-x-4 gap-y-1">
+          <label htmlFor="trade-min-pl-pct" className="text-sm font-medium text-slate-600">
+            Trade Min PL %
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="trade-min-pl-pct"
+              type="number"
+              min="0.1"
+              max="100"
+              step="0.1"
+              value={text}
+              disabled={saving}
+              onChange={(e) => setText(e.target.value)}
+              onBlur={(e) => commit(e.target.value)}
+              className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-right text-sm"
+            />
+            <span className="text-sm text-slate-500">%</span>
+          </div>
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     </div>
   )
@@ -335,6 +421,7 @@ export default function SettingsPage() {
       </div>
       <MinTradesSection />
       <OverWeekendSection />
+      <TradeMinPlSection />
       <NotifyDataSourceSection />
     </div>
   )

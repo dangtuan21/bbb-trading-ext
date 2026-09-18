@@ -428,6 +428,27 @@ function setAccountHidden(payload) {
   fs.writeFileSync(CONFIG_MIRROR_FILE, formatConfigJson(configJson));
 }
 
+// Writes config.json's top-level "trade-min-pl-pct" number (SettingsPage's
+// "Trade Min PL %" field) -- the |P/L %| threshold
+// ext-rebelsfunding/background.js uses when counting a RebelsFunding
+// account's Closed Trades toward "A Trades" (see that file's
+// fnFetchTradeMinPlPct). Lives in config.json rather than a dedicated
+// endpoint/file like notify-config.json's Alert Data Source, since
+// config.json is already the one file BOTH the dashboard (via its /data
+// mirror) and the extension (fetched cross-origin at
+// moreleadnow.com/data/config.json) read -- notify-config.json is never
+// mirrored to the browser at all, so that pattern wouldn't reach the
+// extension.
+function setTradeMinPlPct(payload) {
+  const raw = fs.readFileSync(MATCH_RULES_CONFIG_FILE, 'utf8');
+  const configJson = JSON.parse(raw);
+  configJson['trade-min-pl-pct'] = payload.value;
+
+  fs.writeFileSync(MATCH_RULES_CONFIG_FILE, formatConfigJson(configJson));
+  fs.mkdirSync(FRONTEND_DATA_DIR, { recursive: true });
+  fs.writeFileSync(CONFIG_MIRROR_FILE, formatConfigJson(configJson));
+}
+
 // JSON.stringify(_, null, 4) explodes every array onto its own lines, which
 // would turn a one-rule edit into a diff touching every rule in the file --
 // the opposite of the point of writing straight to the checked-in file.
@@ -961,6 +982,30 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: true }));
       } catch (err) {
         console.error('Failed to update account visibility:', err);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+    });
+    return;
+  }
+
+  // SettingsPage's "Trade Min PL %" field posts here -- see
+  // setTradeMinPlPct's comment above for why this lives in config.json
+  // rather than notify-config.json's endpoint pattern.
+  if (req.method === 'POST' && req.url === '/config/trade-min-pl-pct') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const value = Number(payload.value);
+        if (!Number.isFinite(value) || value <= 0) throw new Error('value must be a positive number');
+        setTradeMinPlPct({ value });
+        console.log(`[${new Date().toISOString()}] config: set trade-min-pl-pct to ${value}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        console.error('Failed to update trade-min-pl-pct:', err);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: String(err) }));
       }

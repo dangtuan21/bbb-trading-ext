@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { parseMatchRules, matchRules as staticMatchRules } from "./matchRules"
 import { parseHiddenAccounts, hiddenAccounts as staticHiddenAccounts } from "./hiddenAccounts"
+import { parseTradeMinPlPct, tradeMinPlPct as staticTradeMinPlPct } from "./tradeMinPl"
 
 const CONFIG_URL = `${import.meta.env.BASE_URL}data/config.json`
 
@@ -11,12 +12,16 @@ async function loadConfig() {
     // write, or no rule ever saved) is a normal state -- fall back to the
     // build-time snapshot rather than blocking the page.
     if (res.status === 404) {
-      return { matchRules: staticMatchRules, hiddenAccounts: staticHiddenAccounts }
+      return { matchRules: staticMatchRules, hiddenAccounts: staticHiddenAccounts, tradeMinPlPct: staticTradeMinPlPct }
     }
     throw new Error(`Could not load ${CONFIG_URL} (${res.status})`)
   }
   const json = await res.json()
-  return { matchRules: parseMatchRules(json), hiddenAccounts: parseHiddenAccounts(json) }
+  return {
+    matchRules: parseMatchRules(json),
+    hiddenAccounts: parseHiddenAccounts(json),
+    tradeMinPlPct: parseTradeMinPlPct(json),
+  }
 }
 
 // Fired (via notifyConfigChanged, below) whenever something writes to
@@ -37,10 +42,11 @@ export function notifyConfigChanged() {
 }
 
 /**
- * useConfigView(): loads match-rules/hidden-accounts from config.json's
- * runtime mirror (data/config.json, written by ext-server alongside the
- * canonical src/data-fact/config.json -- see server.js's CONFIG_MIRROR_FILE),
- * fetched on mount and again every time notifyConfigChanged() fires.
+ * useConfigView(): loads match-rules/hidden-accounts/tradeMinPlPct from
+ * config.json's runtime mirror (data/config.json, written by ext-server
+ * alongside the canonical src/data-fact/config.json -- see server.js's
+ * CONFIG_MIRROR_FILE), fetched on mount and again every time
+ * notifyConfigChanged() fires.
  *
  * matchRules.js/hiddenAccounts.js ALSO export `matchRules`/`hiddenAccounts`
  * as a static, build-time-only snapshot: Vite inlines config.json's content
@@ -56,6 +62,7 @@ export function notifyConfigChanged() {
 export function useConfigView() {
   const [matchRules, setMatchRules] = useState(staticMatchRules)
   const [hiddenAccounts, setHiddenAccounts] = useState(staticHiddenAccounts)
+  const [tradeMinPlPct, setTradeMinPlPct] = useState(staticTradeMinPlPct)
   const [status, setStatus] = useState("loading") // loading | ready | error
   const [error, setError] = useState(null)
 
@@ -64,10 +71,11 @@ export function useConfigView() {
 
     function refresh() {
       loadConfig()
-        .then(({ matchRules, hiddenAccounts }) => {
+        .then(({ matchRules, hiddenAccounts, tradeMinPlPct }) => {
           if (cancelled) return
           setMatchRules(matchRules)
           setHiddenAccounts(hiddenAccounts)
+          setTradeMinPlPct(tradeMinPlPct)
           setStatus("ready")
         })
         .catch((err) => {
@@ -86,5 +94,5 @@ export function useConfigView() {
     }
   }, [])
 
-  return { matchRules, hiddenAccounts, status, error }
+  return { matchRules, hiddenAccounts, tradeMinPlPct, status, error }
 }

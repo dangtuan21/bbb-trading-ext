@@ -17,7 +17,8 @@ import configData from "../data-fact/config.json"
  *       },
  *       ...
  *     ],
- *     "schedule-interval": "60m"
+ *     "schedule-interval": "60m",
+ *     "trade-min-pl-pct": 0.5
  *   }
  *
  * "match-B-position" is optional -- an entry with only "A-position" is a
@@ -33,7 +34,12 @@ import configData from "../data-fact/config.json"
  *
  * "schedule-interval" isn't consumed here. Neither is "hidden-accounts" --
  * a sibling top-level key controlling which accounts are excluded from
- * MainView entirely, unrelated to rules; see lib/hiddenAccounts.js.
+ * MainView entirely, unrelated to rules; see lib/hiddenAccounts.js. Nor is
+ * "trade-min-pl-pct" -- SettingsPage's "Trade Min PL %" field, consumed by
+ * ext-rebelsfunding/background.js (a separate browser context this file
+ * has no reach into), not by anything here; see lib/tradeMinPl.js for the
+ * one place the web app itself reads it (just to populate/display that
+ * Settings field).
  */
 export function parseMatchRules(json) {
   const rules = []
