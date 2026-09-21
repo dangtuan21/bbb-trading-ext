@@ -1091,6 +1091,23 @@ async function scrapeAccount(scanTabId, acc, tradeMinPlPct) {
         pageResult = await execInTab(scanTabId, fnScrapeClosedTradesPagePlPercents).catch(() => null);
       }
       if (!pageResult?.found) break;
+      // Page 0 specifically: `found` only means the table's <thead> (with
+      // the right headers) exists in the DOM -- PrimeReact can paint that
+      // before all <tbody> rows have rendered, so a read taken right after
+      // the "Closed Trades" tab click can catch it mid-populate and return
+      // fewer rows than the page actually has (seen live: account
+      // 22026427572022 read as 1 qualifying trade when the page actually
+      // had 3 -- Tuan, 2026-09-21). Re-read once more a beat later and keep
+      // whichever read has MORE rows: a fully-rendered table never loses
+      // rows between two reads a few hundred ms apart, so the larger read
+      // is always at least as complete.
+      if (page === 0) {
+        await sleep(500);
+        const confirmResult = await execInTab(scanTabId, fnScrapeClosedTradesPagePlPercents).catch(() => null);
+        if (confirmResult?.found && confirmResult.values.length > pageResult.values.length) {
+          pageResult = confirmResult;
+        }
+      }
       pageFound = true;
       // Guards against double-counting: a next-page click that hadn't
       // actually re-rendered yet (or a paginator that reported "last page"
