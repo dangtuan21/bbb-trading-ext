@@ -369,6 +369,23 @@ async function captureFtmoRows() {
 
 async function captureAndSend() {
   const { rows, diag } = await captureFtmoRows();
+  // A capture taken while this tab isn't showing real account data yet --
+  // still loading, or FTMO's own client-side error page ("Oops! Something
+  // went wrong", confirmed live 2026-09-21) -- has no Balance and would
+  // otherwise still get POSTed and silently overwrite the server's
+  // last-known-good FTMO row with this all-blank one (see buildRows'
+  // positions.length===0 branch). That's what made FTMO's account look
+  // like it had vanished from the dashboard: this timer (or the 3s
+  // initial capture) firing during exactly that window, most reliably
+  // right after ext-rebelsfunding's scan opens its own heavy browser
+  // window and starves this tab of resources. Skip the write when that's
+  // the case -- record the diagnostic locally for the popup, but leave
+  // the server's existing row alone so it stays at its last real reading
+  // until a capture actually finds one, rather than flickering blank.
+  if (diag?.reason === 'balance-not-found') {
+    chrome.storage.local.set({ lastCaptureDiag: diag, lastCaptureSkippedTime: new Date().toISOString() }).catch(() => {});
+    return;
+  }
   chrome.runtime.sendMessage({ type: 'FTMO_ROWS', rows, diag }).catch((err) => {
     console.debug('[FTMO Tracker] Failed to send rows:', err);
   });
