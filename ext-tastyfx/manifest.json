@@ -3,20 +3,42 @@
   "name": "TastyFX Positions Tracker",
   "version": "1.0.0",
   "description": "Watches the TastyFX (deal.ig.com) Positions table and appends periodic snapshots to a local JSON history file.",
-  "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://deal.ig.com/*", "https://moreleadnow.com/*"],
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://deal.ig.com/*",
+    "https://moreleadnow.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://deal.ig.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://deal.ig.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
     "default_popup": "popup.html",
     "default_title": "TastyFX Positions Tracker"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   }
 }

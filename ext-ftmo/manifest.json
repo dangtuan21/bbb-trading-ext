@@ -3,7 +3,10 @@
   "name": "FTMO Positions Tracker",
   "version": "1.0.0",
   "description": "Watches the FTMO (OANDA MetriX) account dashboard and writes Balance/Equity/open trades to a local CSV file.",
-  "permissions": ["storage", "tabs"],
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
   "host_permissions": [
     "https://trader.ftmo.oanda.com/*",
     "https://moreleadnow.com/*"
@@ -13,13 +16,29 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://trader.ftmo.oanda.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://trader.ftmo.oanda.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
     "default_popup": "popup.html",
     "default_title": "FTMO Positions Tracker"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   }
 }
