@@ -383,11 +383,17 @@ function fnScrapeBalanceEquity(expectedAccountId) {
 // live via screenshot: a card labeled "Statistics" / "View detailed
 // charts, trade history and performance metrics" with an arrow, which
 // routes (in-app, same tab) to a "Charts" page carrying Profit Factor,
-// Positions Count, Win/Loss trades etc. Positions Count has no
-// minimum-trades gate (RF-412-47507 shows Positions Count: 4 there despite
-// "Unique Trades 3/6" and the still-locked consistency score on the page
-// it came from) -- it's used as Total Trades instead. This is still RF
-// Client Zone (scanTabId), not RF-Trader -- no login/new tab needed.
+// Positions Count, Win/Loss trades etc.
+//
+// This click is now PURELY a navigation step, not a data source in its
+// own right -- Positions Count itself was replaced as of 2026-09-18 (see
+// the "Total Trades used to be 'Positions Count'..." comment a little
+// further down, and scrapeAccount's own call site) by counting Closed
+// Trades rows whose |P/L %| exceeds the Trade Min PL % threshold. Clicking
+// "Statistics" is still required only because it's the one route onto
+// that Charts page in the first place, where the Closed Trades tab lives.
+// This is still RF Client Zone (scanTabId), not RF-Trader -- no login/new
+// tab needed.
 function fnClickStatisticsCard() {
   function simulateClick(el) {
     const rect = el.getBoundingClientRect();
