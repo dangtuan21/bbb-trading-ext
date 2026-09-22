@@ -1280,7 +1280,7 @@ function _blankRowForAccount(acc) {
 }
 
 async function runFullScan() {
-  await chrome.storage.local.set({ scanStatus: 'running', lastScanError: null });
+  await chrome.storage.local.set({ scanStatus: 'running', lastScanError: null, scanStartedAt: Date.now() });
 
   // Confirmed live (2026-08-15) that focused: false wasn't just a minor
   // slowdown -- 5/6 accounts in a real scan NEVER got a live UPL reading
@@ -1387,8 +1387,28 @@ function startScanTimer(minutes) {
   scanTimerId = setInterval(() => runFullScan().catch(() => {}), minutes * 60 * 1000);
 }
 
-chrome.storage.local.get('scanIntervalMinutes', ({ scanIntervalMinutes }) => {
-  if (scanIntervalMinutes) startScanTimer(scanIntervalMinutes);
+// A scan writes scanStatus: 'running' (with scanStartedAt) at the very
+// start of runFullScan() and only ever clears it from inside that same
+// function's catch/success paths. That's fine for a normal run, but if the
+// browser/Mac gets restarted, Chrome is force-quit, or the extension is
+// reloaded WHILE a scan is actually in flight, none of those paths ever
+// run -- 'running' is a plain persisted value in chrome.storage.local, so
+// it survives the restart and the popup is stuck showing "Scan running..."
+// forever even though nothing is actually running (confirmed live 2026-09-
+// 22: exactly this, after a Mac restart). No real scan takes anywhere
+// close to STALE_SCAN_MS, so on every service-worker wake (this top-level
+// code, which is what onStartup/onInstalled/on-demand wake all funnel
+// through) treat a 'running' status older than that as abandoned and
+// reset it rather than leaving the popup lying to the user.
+const STALE_SCAN_MS = 10 * 60 * 1000;
+chrome.storage.local.get(['scanIntervalMinutes', 'scanStatus', 'scanStartedAt'], (data) => {
+  if (data.scanIntervalMinutes) startScanTimer(data.scanIntervalMinutes);
+  if (data.scanStatus === 'running' && (!data.scanStartedAt || Date.now() - data.scanStartedAt > STALE_SCAN_MS)) {
+    chrome.storage.local.set({
+      scanStatus: 'error',
+      lastScanError: 'Previous scan appears to have been interrupted (browser/Mac restarted, or Chrome was closed mid-scan). Click "Run Full Scan Now" to try again.',
+    });
+  }
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.scanIntervalMinutes) {
