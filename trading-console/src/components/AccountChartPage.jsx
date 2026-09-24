@@ -188,6 +188,14 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
           // self-explanatory on first read.
           const isTwoWay = Boolean(row.B_Platform)
           const showDirectionIcon = !isTwoWay
+          // Bar fill itself (not just the label -- see labelColorClass
+          // below) dimmed for 1-way accounts, on top of everything else
+          // that already marks them as the exception (arrow icon, muted
+          // label). Applied only to the background layer (a sibling
+          // `absolute inset-0` div, see barBlinkClass's own comment further
+          // down) so it never touches the white Symbol/reason text drawn
+          // on top -- just the red/green fill reads dimmer for a 1-way row.
+          const barDimClass = isTwoWay ? "" : " opacity-50"
           // 2-way accounts are the common/expected case (see the grouping
           // above), so their label reads as plain black text; 1-way
           // accounts keep the original muted gray, which -- together with
@@ -275,7 +283,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                       style={{ width: `${widthPct}%` }}
                       className="relative flex h-6 min-w-8 items-center justify-end"
                     >
-                      <div className={`absolute inset-0 rounded-l bg-red-600${barBlinkClass}`} />
+                      <div className={`absolute inset-0 rounded-l bg-red-600${barDimClass}${barBlinkClass}`} />
                       {showReason && (
                         <span className="absolute left-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
                       )}
@@ -307,7 +315,7 @@ export default function AccountChartPage({ rows, pctKey = "A_PLPct", positiveCol
                         style={{ width: `${widthPct}%` }}
                         className="relative flex h-6 min-w-8 items-center"
                       >
-                        <div className={`absolute inset-0 rounded-r ${positiveColorClass}${barBlinkClass}`} />
+                        <div className={`absolute inset-0 rounded-r ${positiveColorClass}${barDimClass}${barBlinkClass}`} />
                         <span className="relative truncate px-2 text-xs font-bold text-white">{barInnerLabel}</span>
                         {showReason && (
                           <span className="absolute right-2 text-[10px] font-semibold lowercase text-amber-900">{reasonLabel}</span>
