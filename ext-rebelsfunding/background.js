@@ -844,7 +844,24 @@ async function fnScrapePositions() {
   // couple of seconds, not marginal.
   let result = scrapeOnce();
   let pollAttempts = 0;
-  while (result.anyNotReady && pollAttempts < 10) {
+  // anyNotReady (above) can only ever become true when rows.length > 0 --
+  // both places that set it (a row's own "UPL: --" placeholder, and the
+  // rows>0-but-no-summary-UPL-match fallback) require at least one
+  // lib-trade-line row to already exist. A grid that hasn't rendered ANY
+  // rows yet -- e.g. still mid-re-render right after fnClickPositionsTab
+  // switched back from the Contest Stats tab a moment ago -- reads as
+  // rowCount: 0 with anyNotReady staying false, so this loop never ran for
+  // it: a real open position got accepted as "confirmed flat" off a single
+  // read with zero retries. Confirmed live 2026-09-29 for RFR-509-47206 --
+  // a scan reported rowCount: 0, pollAttempts: 0 for it at the same moment
+  // it had a real, large open position (equity vs. balance and RF-Trader's
+  // own Charts-page UPL both matched a real ~$2,700 floating loss).
+  // One extra read (not the full 10-attempt budget below, which exists for
+  // the slower live-price-feed case) covers a normal re-render without
+  // meaningfully slowing down the many genuinely-flat accounts in a full
+  // scan -- if it's STILL zero after that, treat it as a real "no open
+  // positions" reading same as before.
+  while ((result.anyNotReady || (result.rowCount === 0 && pollAttempts === 0)) && pollAttempts < 10) {
     await sleep(1500);
     result = scrapeOnce();
     pollAttempts += 1;
