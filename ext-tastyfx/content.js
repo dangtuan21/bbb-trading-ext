@@ -1,6 +1,23 @@
 // Runs on deal.ig.com. Scrapes the Positions table on a fixed interval and
 // forwards each snapshot to the background service worker.
-
+//
+// Injected into every frame (manifest.json's all_frames: true), not just
+// the top one. Confirmed live 2026-09-29: IG now renders the Positions
+// grid inside a src-less (blob:) iframe -- the top frame's own instance of
+// this script sees none of "Market"/"Size"/"Latest" anywhere in its body
+// text at all (candidateHeaderRowCount: 0, reason: "no-header-row-found"),
+// so without all_frames it could NEVER see the real grid again once IG's
+// layout changed, permanently stuck showing whatever position was last
+// captured before that (captureSnapshot's positions === null guard
+// correctly refuses to overwrite good data with a failed read, but that
+// also means a top-frame-only content script just goes silent forever).
+// A blob: iframe created by a page inherits that page's origin for content
+// script matching purposes, so all_frames: true is enough to reach it
+// here without needing background.js to drive injection explicitly (the
+// active chrome.scripting.executeScript approach ext-rebelsfunding uses
+// for RF-Trader's own blob: terminal iframe) -- each frame's own
+// captureSnapshot() instance simply no-ops if IT doesn't find the grid,
+// and whichever frame actually holds it does the real work.
 const DEFAULT_CAPTURE_INTERVAL_MINUTES = 20;
 
 const NUMERIC_FIELDS = new Set([
