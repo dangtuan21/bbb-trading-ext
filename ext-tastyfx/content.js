@@ -365,7 +365,22 @@ function captureSnapshot() {
   // storage only otherwise gets touched, on the success path further down.
   chrome.storage.local.set({ lastScanDiagnostics: diag, lastScanTime: new Date().toISOString() });
 
-  if (!positions || !positions.length) {
+  // `positions` is null ONLY from scrapePositions' own chosenIndex < 0
+  // branch -- the grid's header row (MARKET/SIZE/LATEST) wasn't found
+  // anywhere on the page at all, meaning this capture can't be trusted
+  // (wrong page/tab, not logged in, still loading). extractRows, once a
+  // header row IS found, always returns a real array -- an empty [] when
+  // the grid rendered with zero data rows under it, which is a genuinely
+  // trustworthy "no open positions right now" reading, not a failed read.
+  // Treating both cases the same (bailing out with no SNAPSHOT sent
+  // either way) was the bug: the server/dashboard's B_ columns kept
+  // showing tastyfx's LAST real positions forever after the account went
+  // flat, since nothing ever told the server "it's zero now" -- confirmed
+  // live 2026-09-29 (Tuan: "no real trades but UI still showing B cols
+  // values"). Only bail out on a genuinely unreadable page; a confirmed-
+  // empty grid still sends its (empty) snapshot so the server clears the
+  // stale rows the same way a real update would.
+  if (!positions) {
     console.debug('[TastyFX Tracker] Positions table not found on this page/view.', diag);
     return;
   }
