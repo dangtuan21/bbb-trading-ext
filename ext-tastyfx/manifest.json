@@ -5,7 +5,8 @@
   "description": "Watches the TastyFX (deal.ig.com) Positions table and appends periodic snapshots to a local JSON history file.",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://deal.ig.com/*",
@@ -23,7 +24,8 @@
         "content.js"
       ],
       "run_at": "document_idle",
-      "all_frames": true
+      "all_frames": true,
+      "match_origin_as_fallback": true
     }
   ],
   "action": {

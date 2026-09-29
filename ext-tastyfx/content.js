@@ -3,19 +3,37 @@
 //
 // Injected into every frame (manifest.json's all_frames: true), not just
 // the top one. Confirmed live 2026-09-29: IG now renders the Positions
-// grid inside a src-less (blob:) iframe -- the top frame's own instance of
-// this script sees none of "Market"/"Size"/"Latest" anywhere in its body
-// text at all (candidateHeaderRowCount: 0, reason: "no-header-row-found"),
-// so without all_frames it could NEVER see the real grid again once IG's
-// layout changed, permanently stuck showing whatever position was last
-// captured before that (captureSnapshot's positions === null guard
-// correctly refuses to overwrite good data with a failed read, but that
-// also means a top-frame-only content script just goes silent forever).
-// A blob: iframe created by a page inherits that page's origin for content
-// script matching purposes, so all_frames: true is enough to reach it
-// here without needing background.js to drive injection explicitly (the
+// grid inside a src-less iframe (iframeSrcs reports "(no src)", i.e. its
+// src attribute is empty -- content is written into it via JS after
+// creation, not navigated to a real URL) -- the top frame's own instance
+// of this script sees none of "Market"/"Size"/"Latest" anywhere in its
+// body text at all (candidateHeaderRowCount: 0, reason:
+// "no-header-row-found"), so without all_frames it could NEVER see the
+// real grid again once IG's layout changed, permanently stuck showing
+// whatever position was last captured before that (captureSnapshot's
+// positions === null guard correctly refuses to overwrite good data with
+// a failed read, but that also means a top-frame-only content script just
+// goes silent forever).
+//
+// all_frames: true on its own turned out to be NOT enough, though --
+// confirmed live 2026-09-29 by a second scan showing byte-identical
+// diagnostics (including iframeCount: 1) after that fix was deployed,
+// which only makes sense if the extension were still injecting into the
+// top frame alone. Root cause: Chrome only matches a content script's
+// `matches` URL pattern against a frame's OWN url. A src-less frame
+// (about:blank, srcdoc, or blob:) has no navigable URL of its own to
+// match against "https://deal.ig.com/*", so Chrome skips it regardless of
+// all_frames -- that's a separate, additional opt-in:
+// `match_origin_as_fallback: true` (MV3; the modern replacement for the
+// old `match_about_blank`) tells Chrome to instead test the frame's
+// inherited origin (walking up to the nearest ancestor with a real URL)
+// against `matches`, which is what actually lets this script run inside a
+// src-less same-origin frame like this one. Both flags are needed
+// together: all_frames to consider non-top frames at all, and
+// match_origin_as_fallback so a URL-less frame doesn't get filtered back
+// out. No need for background.js to drive injection explicitly (the
 // active chrome.scripting.executeScript approach ext-rebelsfunding uses
-// for RF-Trader's own blob: terminal iframe) -- each frame's own
+// for RF-Trader's own terminal iframe) -- each frame's own
 // captureSnapshot() instance simply no-ops if IT doesn't find the grid,
 // and whichever frame actually holds it does the real work.
 const DEFAULT_CAPTURE_INTERVAL_MINUTES = 20;

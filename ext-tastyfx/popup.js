@@ -87,7 +87,29 @@ forceCaptureBtn.addEventListener('click', async () => {
     return;
   }
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'FORCE_CAPTURE' });
+    // Broadcast to every frame, not just the top one. The Positions grid
+    // now lives inside a src-less child frame (content.js's all_frames +
+    // match_origin_as_fallback reach it for the automatic timer-driven
+    // captures), but chrome.tabs.sendMessage with no explicit frameId only
+    // ever reaches frameId 0 (the top frame) -- it does NOT broadcast to
+    // all frames on its own. Left as a plain sendMessage, "Write Now"
+    // would silently poke only the top frame, which can never find the
+    // grid, so the button would look like it worked (no error thrown) while
+    // never actually refreshing anything. Enumerate real frame ids instead.
+    let frameIds = [0];
+    try {
+      const frames = await chrome.webNavigation.getAllFrames({ tabId: tab.id });
+      if (frames?.length) frameIds = frames.map((f) => f.frameId);
+    } catch {
+      // getAllFrames itself failing (permission not yet granted after an
+      // extension update, page mid-navigation, etc.) -- fall back to just
+      // the top frame rather than not sending anything at all.
+    }
+    await Promise.allSettled(
+      frameIds.map((frameId) =>
+        chrome.tabs.sendMessage(tab.id, { type: 'FORCE_CAPTURE' }, { frameId })
+      )
+    );
     // Give the background script a moment to finish the POST to the server.
     await new Promise((r) => setTimeout(r, 800));
     await refreshStatus();
