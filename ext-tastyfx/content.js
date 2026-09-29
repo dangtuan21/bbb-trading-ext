@@ -274,6 +274,16 @@ function diagnoseNoHeaderRowFound() {
     bodyInnerTextHasMarket: bodyText.includes('MARKET'),
     bodyInnerTextHasSize: bodyText.includes('SIZE'),
     bodyInnerTextHasLatest: bodyText.includes('LATEST'),
+    // IG's platform doesn't always render the Positions grid (header row
+    // and all) when an account is flat -- it can swap in a plain empty-
+    // state message instead ("You have no open positions."), with no grid
+    // markup anywhere in the DOM to find. That's indistinguishable from a
+    // genuine read failure by candidateHeaderRowCount alone (both are 0),
+    // but it's actually the MOST trustworthy possible reading: IG itself
+    // is stating there are zero positions. scrapePositions() below checks
+    // this flag specifically to tell "confirmed flat, safe to clear stale
+    // B columns" apart from "couldn't read the page, don't touch anything".
+    bodyInnerTextHasNoPositionsMessage: bodyText.includes('NO OPEN POSITION'),
     iframeCount: document.querySelectorAll('iframe').length,
     iframeSrcs: Array.from(document.querySelectorAll('iframe')).slice(0, 5).map((f) => f.src || '(no src)'),
     shadowRootHostCount: Array.from(document.querySelectorAll('*')).filter((el) => el.shadowRoot).length,
@@ -319,9 +329,33 @@ function scrapePositions() {
   // the grid into an iframe/Shadow DOM one day), so a future miss still
   // reports something concrete instead of going silent again.
   if (chosenIndex < 0) {
+    const extraDiag = diagnoseNoHeaderRowFound();
+
+    // Confirmed live 2026-09-29: an account sitting at zero open positions
+    // can land here EVERY time, forever -- not because of a bug reading
+    // the grid, but because IG doesn't render a grid at all when there's
+    // nothing in it (an empty-state message instead of an empty table).
+    // Previously this always returned positions: null, which
+    // captureSnapshot() correctly treats as "unreadable, don't send" --
+    // exactly right for an actual failure, but wrong here, since it means
+    // an account that goes flat and stays flat can NEVER clear its last
+    // real snapshot's stale B columns: the one moment that would justify
+    // sending an empty update (header row found, zero rows under it) can
+    // never be reached if the header row itself never renders when empty.
+    // Detecting IG's own "no open positions" text turns this into the
+    // same trustworthy-zero case extractRows already produces for a grid
+    // that DID render with zero data rows -- see captureSnapshot's
+    // positions === null vs [] handling.
+    if (extraDiag.bodyInnerTextHasNoPositionsMessage) {
+      return {
+        positions: [],
+        diag: { ...diag, reason: 'confirmed-empty-no-positions-message', ...extraDiag },
+      };
+    }
+
     return {
       positions: null,
-      diag: { ...diag, reason: 'no-header-row-found', ...diagnoseNoHeaderRowFound() },
+      diag: { ...diag, reason: 'no-header-row-found', ...extraDiag },
     };
   }
 
