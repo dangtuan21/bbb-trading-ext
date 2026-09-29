@@ -6,6 +6,19 @@ import { POSITIONLOG_FIELDS } from "./schema"
 // server.js's platformRows cache + writeCombined) and mirrors it here.
 const POSITIONS_URL = `${import.meta.env.BASE_URL}data/positions.csv`
 
+// positions.csv changes passively, in the background, whenever any
+// extension's own timer (or its "Write Now" button) fires -- unlike
+// market-positions.csv, which only ever updates from an explicit user
+// click (see useMarketPositions.js's refresh()). Nothing in THIS tab
+// drives those writes, so this hook has to poll rather than fetch once on
+// mount, or every screen built on it (MainView, AccountView/Chart,
+// RuleEditForm's "Match B-position" dropdown) keeps showing whatever was
+// true whenever the tab happened to load -- confirmed live 2026-09-29:
+// after a tastyfx fix started correctly clearing a stale position server-
+// side, the already-open RuleEditForm dropdown kept offering it as a
+// match target, because this hook had only ever fetched once, at mount.
+const POLL_INTERVAL_MS = 30_000
+
 function cleanRow(row) {
   const out = {}
   for (const field of POSITIONLOG_FIELDS) {
@@ -51,22 +64,42 @@ export function usePositionLog() {
 
   useEffect(() => {
     let cancelled = false
+    // Plain closure variable, not React state -- this runs inside an
+    // effect that only ever sets up once ([] deps), so a `status` state
+    // value read in here would be permanently stuck at whatever it was on
+    // mount ("loading"), never seeing later renders' "ready". This avoids
+    // that stale-closure trap entirely.
+    let hasLoadedOnce = false
 
-    loadPositions()
-      .then(({ rows, lastModified }) => {
-        if (cancelled) return
-        setRows(rows)
-        setUpdatedAt(lastModified ?? new Date())
-        setStatus("ready")
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setError(err.message)
-        setStatus("error")
-      })
+    function refresh() {
+      loadPositions()
+        .then(({ rows, lastModified }) => {
+          if (cancelled) return
+          setRows(rows)
+          setUpdatedAt(lastModified ?? new Date())
+          setStatus("ready")
+          hasLoadedOnce = true
+        })
+        .catch((err) => {
+          if (cancelled) return
+          // Only the very first load failing should surface an error
+          // state and blank the page -- a later poll failing (ext-server
+          // briefly restarting, a network blip) shouldn't wipe out data
+          // that's already on screen; just keep showing it, slightly
+          // stale, until the next poll succeeds.
+          if (!hasLoadedOnce) {
+            setError(err.message)
+            setStatus("error")
+          }
+        })
+    }
+
+    refresh()
+    const intervalId = setInterval(refresh, POLL_INTERVAL_MS)
 
     return () => {
       cancelled = true
+      clearInterval(intervalId)
     }
   }, [])
 
