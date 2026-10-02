@@ -375,12 +375,69 @@ function MinTradesSection() {
 // these (only one tab renders at a time), a change made here is simply
 // picked up fresh the next time a data page mounts and calls its own copy
 // of the same hook -- no cross-instance sync needed.
+// Pushes warning thresholds / the TP/SL toggle to ext-server so its
+// Pushover alerts use the same numbers as the on-screen highlights (the
+// hooks above only write localStorage, which ext-server can't read).
+// Fire-and-forget with an error message on failure -- the local setting is
+// still saved either way.
+async function syncNotifyThresholds(patch) {
+  const res = await fetch(`${SERVER_URL}/config/notify-thresholds`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  })
+  const result = await res.json()
+  if (!result.ok) throw new Error(result.error || "Server rejected the update")
+  return result
+}
+
 export default function SettingsPage() {
-  const [warningDailyDrawdownPct, setWarningDailyDrawdownPct] = useWarningDailyDrawdownThreshold()
-  const [warningDrawdownPct, setWarningDrawdownPct] = useWarningDrawdownThreshold()
-  const [warningTargetProfitPct, setWarningTargetProfitPct] = useWarningTargetProfitThreshold()
-  const [warningTPSLEnabled, setWarningTPSLEnabled] = useWarningTPSLEnabled()
+  const [warningDailyDrawdownPct, setWarningDailyDrawdownPctLocal] = useWarningDailyDrawdownThreshold()
+  const [warningDrawdownPct, setWarningDrawdownPctLocal] = useWarningDrawdownThreshold()
+  const [warningTargetProfitPct, setWarningTargetProfitPctLocal] = useWarningTargetProfitThreshold()
+  const [warningTPSLEnabled, setWarningTPSLEnabledLocal] = useWarningTPSLEnabled()
   const [dailyDdChartScaleMax, setDailyDdChartScaleMax] = useDailyDdChartScaleMax()
+  const [notifySyncError, setNotifySyncError] = useState(null)
+
+  function pushToServer(patch) {
+    syncNotifyThresholds(patch)
+      .then(() => setNotifySyncError(null))
+      .catch((err) =>
+        setNotifySyncError(`Saved on this screen, but phone alerts weren't updated (${err.message}). Is ext-server running?`)
+      )
+  }
+
+  // One-time sync on mount, so thresholds changed before this sync existed
+  // (or on another browser) take effect for alerts as soon as Settings is
+  // opened, not only after the next edit.
+  useEffect(() => {
+    pushToServer({
+      thresholds: {
+        dailyDrawdownPct: warningDailyDrawdownPct,
+        drawdownPct: warningDrawdownPct,
+        targetProfitPct: warningTargetProfitPct,
+      },
+      tpslEnabled: warningTPSLEnabled,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function setWarningDailyDrawdownPct(n) {
+    setWarningDailyDrawdownPctLocal(n)
+    pushToServer({ thresholds: { dailyDrawdownPct: n } })
+  }
+  function setWarningDrawdownPct(n) {
+    setWarningDrawdownPctLocal(n)
+    pushToServer({ thresholds: { drawdownPct: n } })
+  }
+  function setWarningTargetProfitPct(n) {
+    setWarningTargetProfitPctLocal(n)
+    pushToServer({ thresholds: { targetProfitPct: n } })
+  }
+  function setWarningTPSLEnabled(v) {
+    setWarningTPSLEnabledLocal(v)
+    pushToServer({ tpslEnabled: v })
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -417,6 +474,7 @@ export default function SettingsPage() {
             value={dailyDdChartScaleMax}
             onChange={setDailyDdChartScaleMax}
           />
+          {notifySyncError && <p className="text-xs text-red-600">{notifySyncError}</p>}
         </div>
       </div>
       <MinTradesSection />

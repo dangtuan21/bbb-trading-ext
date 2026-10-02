@@ -113,11 +113,10 @@ const NOTIFY_CONFIG_FILE = path.join(__dirname, 'notify-config.json');
 const DEFAULT_NOTIFY_DATA_SOURCE = 'market';
 
 // Mirrors trading-console's src/lib/settings.js DEFAULT_WARNING_* constants.
-// That file's thresholds live in the browser's localStorage (a personal
-// display preference), invisible to this server, so these are an
-// independent copy for the phone-alert side -- override via
-// notify-config.json's "thresholds" if you tune the on-screen ones and want
-// alerts to match.
+// These are only the fallback: SettingsPage syncs its on-screen thresholds
+// (stored in the browser's localStorage) into notify-config.json's
+// "thresholds" via POST /config/notify-thresholds on every change and on
+// mount, so alerts match the dashboard once Settings has been opened.
 const DEFAULT_NOTIFY_THRESHOLDS = {
   dailyDrawdownPct: 20,
   drawdownPct: 20,
@@ -1021,7 +1020,66 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/config/notify-settings') {
     const cfg = loadNotifyConfig();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, dataSource: cfg.dataSource || DEFAULT_NOTIFY_DATA_SOURCE }));
+    res.end(JSON.stringify({
+      ok: true,
+      dataSource: cfg.dataSource || DEFAULT_NOTIFY_DATA_SOURCE,
+      // Effective values checkWarningsAndNotify actually alerts on --
+      // defaults merged with whatever SettingsPage has synced in via
+      // /config/notify-thresholds below.
+      thresholds: { ...DEFAULT_NOTIFY_THRESHOLDS, ...cfg.thresholds },
+      tpslEnabled: cfg.metrics?.tpsl !== false,
+    }));
+    return;
+  }
+
+  // SettingsPage's Warning Daily Drawdown % / Warning Drawdown % / Warning
+  // Target Profit % / Warning TP/SL fields post here on every change (and
+  // once on mount), so the Pushover alerts use the same numbers the
+  // dashboard highlights with. Before this, those fields lived only in the
+  // browser's localStorage and the server kept alerting at
+  // DEFAULT_NOTIFY_THRESHOLDS no matter what was set on screen. Body (every
+  // field optional, only the ones sent are changed):
+  //   { thresholds: { dailyDrawdownPct, drawdownPct, targetProfitPct },
+  //     tpslEnabled: true | false }
+  // A metric with a "tiers" ladder in notify-config.json still uses that
+  // ladder instead of its single threshold (see tierLadderFor).
+  if (req.method === 'POST' && req.url === '/config/notify-thresholds') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const current = loadNotifyConfig();
+        const patch = {};
+        if (payload.thresholds !== undefined) {
+          const allowed = ['dailyDrawdownPct', 'drawdownPct', 'targetProfitPct'];
+          const nextThresholds = { ...current.thresholds };
+          for (const [k, v] of Object.entries(payload.thresholds || {})) {
+            if (!allowed.includes(k)) throw new Error(`unknown threshold "${k}"`);
+            const n = Number(v);
+            if (!Number.isFinite(n) || n <= 0 || n > 100) throw new Error(`${k} must be a number in (0, 100]`);
+            nextThresholds[k] = n;
+          }
+          patch.thresholds = nextThresholds;
+        }
+        if (payload.tpslEnabled !== undefined) {
+          if (typeof payload.tpslEnabled !== 'boolean') throw new Error('tpslEnabled must be true or false');
+          patch.metrics = { ...current.metrics, tpsl: payload.tpslEnabled };
+        }
+        const next = saveNotifyConfig(patch);
+        console.log(`[${new Date().toISOString()}] config: notify thresholds set to ${JSON.stringify(next.thresholds || {})}, tpsl ${next.metrics?.tpsl !== false ? 'on' : 'off'}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          thresholds: { ...DEFAULT_NOTIFY_THRESHOLDS, ...next.thresholds },
+          tpslEnabled: next.metrics?.tpsl !== false,
+        }));
+      } catch (err) {
+        console.error('Failed to update notify thresholds:', err);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+    });
     return;
   }
 
