@@ -7,6 +7,7 @@ import {
   useDailyDdChartScaleMax,
   useMinTrades,
   useOverWeekend,
+  useMinBSideAvailable,
 } from "../lib/settings"
 import { useConfigView, notifyConfigChanged } from "../lib/useConfigView"
 
@@ -79,6 +80,43 @@ function CountField({ id, label, value, onChange }) {
         onBlur={(e) => commit(e.target.value)}
         className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-right text-sm"
       />
+    </div>
+  )
+}
+
+// Same shape as CountField, but for a dollar amount (decimal step, "$"
+// prefix instead of a bare count) -- used by Min B-Side's Available below.
+function MoneyField({ id, label, value, onChange }) {
+  const [text, setText] = useState(String(value))
+
+  function commit(raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0) {
+      onChange(n)
+      setText(String(n))
+    } else {
+      setText(String(value))
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-[200px_1fr] items-center gap-x-4 gap-y-1">
+      <label htmlFor={id} className="text-sm font-medium text-slate-600">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-slate-500">$</span>
+        <input
+          id={id}
+          type="number"
+          min="0"
+          step="0.01"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-right text-sm"
+        />
+      </div>
     </div>
   )
 }
@@ -328,6 +366,29 @@ function NotifyDataSourceSection() {
   )
 }
 
+// Min B-Side's Available -- see lib/settings.js's useMinBSideAvailable for
+// the storage shape/default. Per Tuan (2026-10-08): just stored here for
+// now, same as Min Trades/Over Weekend below -- no warning/highlight
+// behavior wired to it yet (e.g. nothing on BSideSummary's Available tile
+// reads this).
+function MinBSideAvailableSection() {
+  const [minBSideAvailable, setMinBSideAvailable] = useMinBSideAvailable()
+
+  return (
+    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold text-slate-700">B-side</h3>
+      <div className="flex flex-col gap-4">
+        <MoneyField
+          id="min-b-side-available"
+          label="Min B-Side's Available"
+          value={minBSideAvailable}
+          onChange={setMinBSideAvailable}
+        />
+      </div>
+    </div>
+  )
+}
+
 // Min Trades per platform (RF/FTMO/AC) -- see lib/settings.js's
 // useMinTrades for the storage shape/defaults. Per Tuan (2026-09-14): just
 // stored here for now, no warning/highlight behavior wired to it yet.
@@ -479,6 +540,7 @@ export default function SettingsPage() {
       </div>
       <MinTradesSection />
       <OverWeekendSection />
+      <MinBSideAvailableSection />
       <TradeMinPlSection />
       <NotifyDataSourceSection />
     </div>

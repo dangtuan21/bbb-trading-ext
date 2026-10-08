@@ -143,6 +143,35 @@ export function useDailyDdChartScaleMax() {
   return [scaleMax, updateScaleMax]
 }
 
+// "Min B-Side's Available" -- a dollar floor on the B-side Chart's
+// Available tile (see components/BSideSummary.jsx). Per Tuan (2026-10-08):
+// just stored here for now, same as Min Trades/Over Weekend below -- no
+// warning/highlight behavior wired to it yet. Single global value (not
+// per-platform like Min Trades/Over Weekend) since there's currently only
+// ever one B-side platform (tastyfx); readStoredThreshold's own "> 0"
+// floor already suits a dollar amount just as well as a percentage, so
+// this reuses it rather than a new helper.
+const MIN_B_SIDE_AVAILABLE_STORAGE_KEY = "minBSideAvailable"
+export const DEFAULT_MIN_B_SIDE_AVAILABLE = 10
+
+/**
+ * Min B-Side's Available (see MIN_B_SIDE_AVAILABLE_STORAGE_KEY above) --
+ * same shape/persistence as the warning thresholds (useWarningDaily
+ * DrawdownThreshold etc.), just not tied to any highlight yet.
+ */
+export function useMinBSideAvailable() {
+  const [threshold, setThreshold] = useState(() =>
+    readStoredThreshold(MIN_B_SIDE_AVAILABLE_STORAGE_KEY, DEFAULT_MIN_B_SIDE_AVAILABLE)
+  )
+
+  function updateThreshold(next) {
+    setThreshold(next)
+    localStorage.setItem(MIN_B_SIDE_AVAILABLE_STORAGE_KEY, String(next))
+  }
+
+  return [threshold, updateThreshold]
+}
+
 // "Min Trades" per platform -- RebelsFunding/FTMO/AlphaCapital each get
 // their own minimum-trades value. Per Tuan (2026-09-14): just stored here
 // for now, nothing reads it yet (no warning/highlight wired to it). Kept
