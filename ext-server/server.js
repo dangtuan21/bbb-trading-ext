@@ -129,6 +129,16 @@ const DEFAULT_NOTIFY_THRESHOLDS = {
   // "tiers": { "tpsl": [...] } ladder, though a boolean metric has no real
   // use for more than one rung.
   tpslPct: 100,
+  // Mirrors trading-console's src/lib/settings.js DEFAULT_MIN_B_SIDE_AVAILABLE
+  // -- the dollar floor the bSideAvailable metric below compares a B-side
+  // account's Available against. SettingsPage syncs its on-screen value
+  // into notify-config.json the same way as the four warning thresholds
+  // above, via /config/notify-thresholds.
+  minBSideAvailable: 10,
+  // Same boolean-gate trick as tpslPct above: bSideAvailable's value() only
+  // ever returns 100 (Available has dropped below minBSideAvailable) or
+  // null, so this is just the fixed rung 100 needs to reach.
+  bSideAvailablePct: 100,
 };
 
 function csvField(value) {
@@ -701,6 +711,37 @@ const WARNING_METRICS = [
   },
 ];
 
+// Same entry shape as WARNING_METRICS, evaluated against B-side accounts
+// (collectBSideAccounts) in checkWarningsAndNotify's own second loop below,
+// rather than mixed into WARNING_METRICS/the A-side loop -- row.Available
+// only exists on a B-side (tastyfx) row, always blank on an A-side one, so
+// folding this into WARNING_METRICS would just mean it silently never
+// fires. Toggleable via notify-config.json's "metrics" the same way as any
+// WARNING_METRICS entry (cfg.metrics?.bSideAvailable === false mutes it).
+const B_SIDE_WARNING_METRICS = [
+  {
+    // Low-balance warning, not a ratio-vs-limit climb like the A-side
+    // metrics above -- value() uses the same 100/null boolean-gate trick as
+    // tpsl above (see that metric's comment) so this can reuse the exact
+    // same tier-ladder/transition-only/re-arm machinery instead of a
+    // bespoke "below threshold" code path. thresholdKey points at the fixed
+    // rung (bSideAvailablePct, always 100); the real dollar comparison
+    // (Available vs. minBSideAvailable) happens inside value() itself,
+    // same two-threshold-keys split tpsl uses for dailyDrawdownPct.
+    key: 'bSideAvailable',
+    thresholdKey: 'bSideAvailablePct',
+    label: 'Low Available',
+    priority: 1,
+    sound: 'siren',
+    value: (row, thresholds) => {
+      const available = toNum(row.Available);
+      return available !== null && available < thresholds.minBSideAvailable ? 100 : null;
+    },
+    message: (row, _tierPct, thresholds) =>
+      `Available $${row.Available} has dropped below Min B-Side's Available $${thresholds.minBSideAvailable}.`,
+  },
+];
+
 // Never throws -- every failure mode (missing config, API error, network
 // error) is caught and reported in the returned { ok, error } instead, so
 // callers on the hot /write path can fire-and-forget it safely, while
@@ -811,6 +852,36 @@ function collectASideAccounts(dataSource) {
   return [...seen.values()];
 }
 
+// One row per B-side account (currently just tastyfx) -- same first-row-
+// wins account-level dedup as collectASideAccounts above (Available/
+// Margin/Funds/CashRebate are account-level fields, identical across every
+// PositionLog row for that account -- see ext-server's own buildTastyfxRows
+// and the flat-account placeholder row it emits). Deliberately always reads
+// this server's own in-memory platformRows (the "account" dataSource),
+// never market-positions.csv regardless of notify-config.json's dataSource
+// setting -- Available/Margin/CashRebate are account-currency figures, not
+// open positions, so market-server's FX-priced reconstruction (built for
+// repricing Latest/PositionPL/Equity on open positions) has no bearing on
+// them and may not even carry these columns through.
+//
+// Unlike collectASideAccounts, does NOT skip an account with no open
+// position -- a flat B-side account's Available is exactly the figure Min
+// B-Side's Available exists to watch (see buildTastyfxRows' placeholder-row
+// comment: a flat account still gets one row here with real account-level
+// figures, specifically so this doesn't go blind the moment tastyfx goes
+// flat).
+function collectBSideAccounts() {
+  const rawRows = PLATFORM_ORDER.flatMap((platformKey) => platformRows[platformKey]);
+
+  const seen = new Map();
+  for (const row of rawRows) {
+    if (NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
+    const key = `${row.Platform}|${row.AccountID}`;
+    if (!seen.has(key)) seen.set(key, row);
+  }
+  return [...seen.values()];
+}
+
 // notify-config.json's "tiers": { "<metricKey>": [80, 90, 95, 100] }
 // overrides a metric's single `thresholds[thresholdKey]` value with a
 // multi-rung ladder. Always returned sorted ascending regardless of the
@@ -840,12 +911,43 @@ function tierIndexFor(value, ladder) {
 // account+metric (-1 = none yet, i.e. below the first rung).
 const tierState = new Map();
 
+// Shared by both the A-side and B-side loops in checkWarningsAndNotify --
+// evaluates one metric against one row, fires sendPushover on a genuine
+// climb to a new tier-ladder rung, and updates tierState. Pulled out once
+// B_SIDE_WARNING_METRICS needed the exact same transition-only/re-arm
+// logic WARNING_METRICS already had, rather than copy-pasting the loop
+// body a second time with a different row/metric source.
+function evaluateMetric(row, metric, thresholds, cfg) {
+  const ladder = tierLadderFor(metric, thresholds, cfg);
+  // `thresholds` is passed through to value()/message() too -- tpsl and
+  // bSideAvailable both actually use it (their warning depends on a
+  // DIFFERENT threshold key than their own thresholdKey -- see each
+  // metric's comment); every ratio-based metric's value()/message() just
+  // ignores the extra argument.
+  const currentIndex = tierIndexFor(metric.value(row, thresholds), ladder);
+  const stateKey = `${row.Platform}|${row.AccountID}|${metric.key}`;
+  const lastIndex = tierState.has(stateKey) ? tierState.get(stateKey) : -1;
+  // Only fires on a genuine climb to a new rung -- dropping back down
+  // (currentIndex < lastIndex) just lowers the stored index so a later
+  // re-climb through that same rung notifies again, same re-arm behavior
+  // the old true/false version had at its one threshold.
+  if (currentIndex > lastIndex) {
+    const crossedTierPct = ladder[currentIndex];
+    sendPushover(
+      `${row.Platform} ${row.AccountID} -- ${metric.label}`,
+      metric.message(row, crossedTierPct, thresholds),
+      { priority: metric.priority, sound: metric.sound }
+    );
+  }
+  tierState.set(stateKey, currentIndex);
+}
+
 function checkWarningsAndNotify() {
   const cfg = loadNotifyConfig();
   const thresholds = { ...DEFAULT_NOTIFY_THRESHOLDS, ...cfg.thresholds };
-  const metrics = WARNING_METRICS.filter((m) => cfg.metrics?.[m.key] !== false);
   const dataSource = cfg.dataSource || DEFAULT_NOTIFY_DATA_SOURCE;
 
+  const metrics = WARNING_METRICS.filter((m) => cfg.metrics?.[m.key] !== false);
   for (const row of collectASideAccounts(dataSource)) {
     // No open position at all -- skip every metric for this account rather
     // than let stale last-known account-level numbers (Balance/Equity/DD
@@ -853,28 +955,20 @@ function checkWarningsAndNotify() {
     // phone notification. Same suppression trading-console's compute.js
     // already applies to MainView's on-screen highlights (hasOpenPosition).
     if (!row._hasOpenPosition) continue;
-    for (const metric of metrics) {
-      const ladder = tierLadderFor(metric, thresholds, cfg);
-      // `thresholds` is passed through to value()/message() too -- only the
-      // tpsl metric actually uses it (its warning depends on
-      // dailyDrawdownPct, not just its own thresholdKey); every other
-      // metric's value()/message() ignores the extra argument.
-      const currentIndex = tierIndexFor(metric.value(row, thresholds), ladder);
-      const stateKey = `${row.Platform}|${row.AccountID}|${metric.key}`;
-      const lastIndex = tierState.has(stateKey) ? tierState.get(stateKey) : -1;
-      // Only fires on a genuine climb to a new rung -- dropping back down
-      // (currentIndex < lastIndex) just lowers the stored index so a later
-      // re-climb through that same rung notifies again, same re-arm
-      // behavior the old true/false version had at its one threshold.
-      if (currentIndex > lastIndex) {
-        const crossedTierPct = ladder[currentIndex];
-        sendPushover(
-          `${row.Platform} ${row.AccountID} -- ${metric.label}`,
-          metric.message(row, crossedTierPct, thresholds),
-          { priority: metric.priority, sound: metric.sound }
-        );
-      }
-      tierState.set(stateKey, currentIndex);
+    for (const metric of metrics) evaluateMetric(row, metric, thresholds, cfg);
+  }
+
+  // B-side accounts (tastyfx) -- separate loop, separate row source
+  // (collectBSideAccounts, always this server's own data -- see its own
+  // comment for why it ignores dataSource), and deliberately NOT gated on
+  // _hasOpenPosition (collectBSideAccounts doesn't even compute that flag --
+  // see Min B-Side's Available's own purpose: watching Available matters
+  // precisely when the account may be flat, not only while it's holding a
+  // position).
+  const bSideMetrics = B_SIDE_WARNING_METRICS.filter((m) => cfg.metrics?.[m.key] !== false);
+  if (bSideMetrics.length) {
+    for (const row of collectBSideAccounts()) {
+      for (const metric of bSideMetrics) evaluateMetric(row, metric, thresholds, cfg);
     }
   }
 }
@@ -1088,12 +1182,22 @@ const server = http.createServer((req, res) => {
         const current = loadNotifyConfig();
         const patch = {};
         if (payload.thresholds !== undefined) {
-          const allowed = ['dailyDrawdownPct', 'drawdownPct', 'targetProfitPct'];
+          // minBSideAvailable is a dollar floor, not a percentage -- no
+          // reason it couldn't exceed 100 (e.g. "don't let Available drop
+          // below $500"), so it gets its own range check (just > 0) rather
+          // than the (0, 100] cap every percentage threshold uses.
+          const pctAllowed = ['dailyDrawdownPct', 'drawdownPct', 'targetProfitPct'];
+          const dollarAllowed = ['minBSideAvailable'];
           const nextThresholds = { ...current.thresholds };
           for (const [k, v] of Object.entries(payload.thresholds || {})) {
-            if (!allowed.includes(k)) throw new Error(`unknown threshold "${k}"`);
             const n = Number(v);
-            if (!Number.isFinite(n) || n <= 0 || n > 100) throw new Error(`${k} must be a number in (0, 100]`);
+            if (pctAllowed.includes(k)) {
+              if (!Number.isFinite(n) || n <= 0 || n > 100) throw new Error(`${k} must be a number in (0, 100]`);
+            } else if (dollarAllowed.includes(k)) {
+              if (!Number.isFinite(n) || n <= 0) throw new Error(`${k} must be a positive number`);
+            } else {
+              throw new Error(`unknown threshold "${k}"`);
+            }
             nextThresholds[k] = n;
           }
           patch.thresholds = nextThresholds;

@@ -367,13 +367,14 @@ function NotifyDataSourceSection() {
 }
 
 // Min B-Side's Available -- see lib/settings.js's useMinBSideAvailable for
-// the storage shape/default. Per Tuan (2026-10-08): just stored here for
-// now, same as Min Trades/Over Weekend below -- no warning/highlight
-// behavior wired to it yet (e.g. nothing on BSideSummary's Available tile
-// reads this).
-function MinBSideAvailableSection() {
-  const [minBSideAvailable, setMinBSideAvailable] = useMinBSideAvailable()
-
+// the storage shape/default. Unlike Min Trades/Over Weekend below, this
+// value DOES drive something now (ext-server's "Low Available" Pushover
+// alert -- see B_SIDE_WARNING_METRICS in server.js), so value/onChange
+// come from SettingsPage() as props, same as the three Warning % fields
+// above -- SettingsPage is what owns pushToServer (syncs to ext-server's
+// notify-config.json, which a plain localStorage-only field like Min
+// Trades has no reason to do).
+function MinBSideAvailableSection({ value, onChange }) {
   return (
     <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <h3 className="mb-3 text-sm font-semibold text-slate-700">B-side</h3>
@@ -381,8 +382,8 @@ function MinBSideAvailableSection() {
         <MoneyField
           id="min-b-side-available"
           label="Min B-Side's Available"
-          value={minBSideAvailable}
-          onChange={setMinBSideAvailable}
+          value={value}
+          onChange={onChange}
         />
       </div>
     </div>
@@ -458,6 +459,7 @@ export default function SettingsPage() {
   const [warningTargetProfitPct, setWarningTargetProfitPctLocal] = useWarningTargetProfitThreshold()
   const [warningTPSLEnabled, setWarningTPSLEnabledLocal] = useWarningTPSLEnabled()
   const [dailyDdChartScaleMax, setDailyDdChartScaleMax] = useDailyDdChartScaleMax()
+  const [minBSideAvailable, setMinBSideAvailableLocal] = useMinBSideAvailable()
   const [notifySyncError, setNotifySyncError] = useState(null)
 
   function pushToServer(patch) {
@@ -477,6 +479,7 @@ export default function SettingsPage() {
         dailyDrawdownPct: warningDailyDrawdownPct,
         drawdownPct: warningDrawdownPct,
         targetProfitPct: warningTargetProfitPct,
+        minBSideAvailable,
       },
       tpslEnabled: warningTPSLEnabled,
     })
@@ -498,6 +501,10 @@ export default function SettingsPage() {
   function setWarningTPSLEnabled(v) {
     setWarningTPSLEnabledLocal(v)
     pushToServer({ tpslEnabled: v })
+  }
+  function setMinBSideAvailable(n) {
+    setMinBSideAvailableLocal(n)
+    pushToServer({ thresholds: { minBSideAvailable: n } })
   }
 
   return (
@@ -540,7 +547,7 @@ export default function SettingsPage() {
       </div>
       <MinTradesSection />
       <OverWeekendSection />
-      <MinBSideAvailableSection />
+      <MinBSideAvailableSection value={minBSideAvailable} onChange={setMinBSideAvailable} />
       <TradeMinPlSection />
       <NotifyDataSourceSection />
     </div>
