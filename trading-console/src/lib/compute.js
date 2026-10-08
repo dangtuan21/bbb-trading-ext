@@ -70,7 +70,7 @@ export function computeAccountLog(rows) {
 // excluded from the right block. Matches config.json's "A-position" prefix
 // for every rule (RebelsFunding/FTMO/AlphaCapital), never "tastyfx" (always
 // the "B" match target there).
-const A_SIDE_PLATFORMS = new Set(["RebelsFunding", "AlphaCapital", "FTMO"])
+export const A_SIDE_PLATFORMS = new Set(["RebelsFunding", "AlphaCapital", "FTMO"])
 
 /**
  * MainView: left block = one row per A-side ACCOUNT (account-level, not one

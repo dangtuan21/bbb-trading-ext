@@ -12,6 +12,12 @@ export const POSITIONLOG_FIELDS = [
   "Balance",
   "Equity",
   "AccountPL",
+  // tastyfx-only, off its own account-summary strip (Funds/Profit-Loss/
+  // Margin/Available/Cash Rebate) -- see ext-server/server.js's
+  // buildTastyfxRows. Blank for every other platform.
+  "Margin",
+  "Available",
+  "CashRebate",
   "InitialBalance",
   "StartingEquity",
   "MaxDailyDrawdown",
@@ -56,6 +62,9 @@ export const MONEY_FIELDS = new Set([
   "Balance",
   "Equity",
   "AccountPL",
+  "Margin",
+  "Available",
+  "CashRebate",
   "InitialBalance",
   "StartingEquity",
   "MaxDailyDrawdown",

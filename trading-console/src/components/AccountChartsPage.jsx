@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import AccountChartPage from "./AccountChartPage"
+import BSideSummary from "./BSideSummary"
 import PageHeader from "./PageHeader"
 import { useAccountView } from "../lib/useAccountView"
 import { useDailyDdChartScaleMax, useOverWeekend } from "../lib/settings"
@@ -36,7 +37,14 @@ function overWeekendKeyForPlatform(platform) {
 export default function AccountChartsPage() {
   const [dailyDdChartScaleMax] = useDailyDdChartScaleMax()
   const [overWeekend] = useOverWeekend()
-  const { mainView, status, error, sourceFile, freshnessLabel } = useAccountView()
+  // positionLogRows: the raw, unjoined PositionLog rows -- needed for the
+  // "B-side Chart" section below, which reads a B-side account's own
+  // summary strip (Funds/Profit-Loss/Margin/Available/Cash Rebate)
+  // directly, not through mainView's A-side join (there's no A-side
+  // account on that side to join against). `rows` below stays exactly
+  // what it always was (mainView.joined) for the two existing bar-chart
+  // sections.
+  const { mainView, status, error, sourceFile, freshnessLabel, rows: positionLogRows } = useAccountView()
   const rows = mainView.joined
   // Friday + that account's platform has Over Weekend set to Off --
   // evaluated once per render off the real wall clock (not from any CSV
@@ -175,6 +183,13 @@ export default function AccountChartsPage() {
               <h3 className="text-sm font-semibold text-slate-700">Full Chart</h3>
             </div>
             <AccountChartPage rows={chartRows} warningKey="A_MaxDrawdownWarning" warningLabel="max dd" extraWarningKey="A_OverWeekendWarning" extraWarningLabel="weekend" />
+          </section>
+
+          <section>
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold text-slate-700">B-side Chart</h3>
+            </div>
+            <BSideSummary rows={positionLogRows} />
           </section>
         </div>
       )}

@@ -163,6 +163,11 @@ function fmt2(n) {
 const HEADER = [
   'SnapshotDate', 'Platform', 'AccountID', 'AccountLabel', 'Phase', 'TotalTrades', 'IsRealMoney',
   'Balance', 'Equity', 'AccountPL',
+  // Margin/Available/CashRebate: tastyfx-only, off the same account-summary
+  // strip Balance/AccountPL already come from (see buildTastyfxRows) --
+  // every other platform leaves these blank, same convention as the
+  // RebelsFunding-only block below.
+  'Margin', 'Available', 'CashRebate',
   'InitialBalance', 'StartingEquity', 'MaxDailyDrawdown', 'MaxDailyDrawdownPct',
   'TodayDrawdown', 'TodayDrawdownPct',
   'MaxDrawdownAmount', 'MaxDrawdownPct', 'CurrentValueAmount', 'CurrentValuePct',
@@ -175,13 +180,16 @@ function buildTastyfxRows({ snapshot, accountId, accountLabel }) {
   const snapshotDate = fmtDate(snapshot.timestamp);
   const balance = snapshot.account?.funds ?? null;
   const accountPL = snapshot.account?.profitloss ?? null;
+  const margin = snapshot.account?.margin ?? null;
+  const available = snapshot.account?.available ?? null;
+  const cashRebate = snapshot.account?.cashrebate ?? null;
   // tastyfx's account strip (Funds/Profit-Loss/Margin/Available/Cash Rebate)
   // never shows a separate "Equity" figure -- left blank rather than
   // computed as Balance+AccountPL, since that's a derived number, not
   // something actually read off the page.
   const equity = null;
 
-  return (snapshot.positions || []).map((p) => ({
+  const base = {
     SnapshotDate: snapshotDate,
     Platform: PLATFORM.TASTYFX,
     AccountID: accountId,
@@ -190,6 +198,34 @@ function buildTastyfxRows({ snapshot, accountId, accountLabel }) {
     Balance: fmt2(balance),
     Equity: fmt2(equity),
     AccountPL: fmt2(accountPL),
+    Margin: fmt2(margin),
+    Available: fmt2(available),
+    CashRebate: fmt2(cashRebate),
+  };
+
+  const positions = snapshot.positions || [];
+
+  // A confirmed-flat account (see content.js's positions: [] case) still
+  // has real Funds/Margin/Available/Cash Rebate -- without a placeholder
+  // row here, those numbers would vanish from positions.csv entirely the
+  // moment the account goes flat (this platform's rows get wholesale
+  // replaced by an empty array below, see the /write handler), leaving the
+  // B-side Chart with nothing to show for an account that's very much
+  // still open, just not currently holding a position. Same 'n/a'/'none'
+  // placeholder shape RebelsFunding's own flat-account row already uses
+  // (see ext-rebelsfunding/background.js) -- Symbol: 'n/a' so this row
+  // never matches a symbol-specific match-B-position rule (compute.js's
+  // row-level join only fires on an exact Symbol match).
+  if (positions.length === 0) {
+    return [{
+      ...base,
+      PosID: 'n/a', Symbol: 'n/a', Direction: 'n/a', Size: 'n/a', SizeUnit: 'n/a',
+      Opening: 'n/a', Latest: 'n/a', StopLossPrice: 'none', TakeProfitPrice: 'none', PositionPL: fmt2(accountPL),
+    }];
+  }
+
+  return positions.map((p) => ({
+    ...base,
     PosID: 'n/a',
     Symbol: p.market,
     Direction: p.size >= 0 ? 'Buy' : 'Sell',
