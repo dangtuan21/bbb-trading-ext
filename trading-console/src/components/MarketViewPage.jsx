@@ -107,6 +107,7 @@ export default function MarketViewPage({ onRowClick }) {
             emptyMessage={emptyMessage}
             onRowClick={onRowClick}
             rowBg={(row) => (row.A_Symbol === "n/a" ? "bg-gray-400" : "")}
+            sumColumns={["A_AccountPL", "B_SymbolPL"]}
           />
         </>
       )}

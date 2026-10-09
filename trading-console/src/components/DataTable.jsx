@@ -83,7 +83,7 @@ function sideOf(key) {
  * stale account-level numbers don't compete visually with rows that have
  * real positions open). Text switches to black whenever this fires.
  */
-export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick, rowBg }) {
+export default function DataTable({ columns, rows, emptyMessage = "No rows to show.", onRowClick, rowBg, sumColumns }) {
   if (!rows.length) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 py-16 text-sm text-slate-400">
@@ -182,6 +182,51 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
             )
           })}
         </tbody>
+        {/* Optional "Sum" footer row -- requested by Tuan (2026-10-09) for
+            AccountView/MarketView's A PL/B PL columns, but written generic
+            (any subset of `columns` by key, not hardcoded to those two) so
+            another page could reuse it later. Sums `rows` as given to this
+            component -- i.e. whatever's CURRENTLY visible (AccountView/
+            MarketView's own Active/Inactive/All filter already narrows
+            `rows` before it reaches DataTable), not some separate
+            unfiltered total. Same parseFloat-based reading every other
+            cell already does (see isNegative above) rather than a shared
+            toNumber helper -- treats a non-numeric/missing value as 0 so
+            one blank row can't NaN the whole total. Only money columns are
+            meaningful to sum here (A PL/B PL both are), so formatting
+            mirrors a normal money cell (formatMoney + red-if-negative);
+            every other column just gets a blank cell, with "Sum" labeling
+            the row in the first column instead. */}
+        {sumColumns && sumColumns.length > 0 && (
+          <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+            <tr>
+              {cols.map((col, i) => {
+                if (!sumColumns.includes(col.key)) {
+                  return (
+                    <td
+                      key={col.key}
+                      className={`whitespace-nowrap px-3 py-2 ${col.numeric ? "text-right" : "text-left"}`}
+                    >
+                      {i === 0 ? "Sum" : ""}
+                    </td>
+                  )
+                }
+                const total = rows.reduce((acc, row) => acc + (parseFloat(row[col.key]) || 0), 0)
+                const negative = col.money && total < 0
+                return (
+                  <td
+                    key={col.key}
+                    className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
+                      negative ? "text-red-600" : "text-slate-800"
+                    }`}
+                  >
+                    {col.money ? formatMoney(total) : total}
+                  </td>
+                )
+              })}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   )
