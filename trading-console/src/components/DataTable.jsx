@@ -109,6 +109,54 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
     <div className="overflow-auto rounded-lg border border-slate-200 shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="sticky top-0 bg-slate-800 text-slate-100">
+          {/* Optional "Sum" row -- requested by Tuan (2026-10-09) for
+              AccountView/MarketView's A PL/B PL columns, but written
+              generic (any subset of `columns` by key, not hardcoded to
+              those two) so another page could reuse it later. Sums `rows`
+              as given to this component -- i.e. whatever's CURRENTLY
+              visible (AccountView/MarketView's own Active/Inactive/All
+              filter already narrows `rows` before it reaches DataTable),
+              not some separate unfiltered total. Same parseFloat-based
+              reading every other cell already does (see isNegative below)
+              rather than a shared toNumber helper -- treats a non-numeric/
+              missing value as 0 so one blank row can't NaN the whole
+              total. Only money columns are meaningful to sum here (A PL/
+              B PL both are), so formatting mirrors a normal money cell
+              (formatMoney + red-if-negative); every other column just
+              gets a blank cell, with "Sum" labeling the row in the first
+              column instead.
+              Placed ABOVE the column-label row rather than as a <tfoot>
+              below the data (Tuan, 2026-10-10 -- prefers it there instead
+              of at the bottom), inside this same sticky <thead> so the two
+              rows scroll together and stay pinned as one block. */}
+          {sumColumns && sumColumns.length > 0 && (
+            <tr className="border-b border-slate-600 bg-slate-700/60 text-xs font-semibold">
+              {cols.map((col, i) => {
+                if (!sumColumns.includes(col.key)) {
+                  return (
+                    <td
+                      key={col.key}
+                      className={`whitespace-nowrap px-3 py-1.5 ${col.numeric ? "text-right" : "text-left"}`}
+                    >
+                      {i === 0 ? "Sum" : ""}
+                    </td>
+                  )
+                }
+                const total = rows.reduce((acc, row) => acc + (parseFloat(row[col.key]) || 0), 0)
+                const negative = col.money && total < 0
+                return (
+                  <td
+                    key={col.key}
+                    className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${
+                      negative ? "text-red-400" : "text-slate-100"
+                    }`}
+                  >
+                    {col.money ? formatMoney(total) : total}
+                  </td>
+                )
+              })}
+            </tr>
+          )}
           <tr>
             {cols.map((col) => (
               <th
@@ -182,51 +230,6 @@ export default function DataTable({ columns, rows, emptyMessage = "No rows to sh
             )
           })}
         </tbody>
-        {/* Optional "Sum" footer row -- requested by Tuan (2026-10-09) for
-            AccountView/MarketView's A PL/B PL columns, but written generic
-            (any subset of `columns` by key, not hardcoded to those two) so
-            another page could reuse it later. Sums `rows` as given to this
-            component -- i.e. whatever's CURRENTLY visible (AccountView/
-            MarketView's own Active/Inactive/All filter already narrows
-            `rows` before it reaches DataTable), not some separate
-            unfiltered total. Same parseFloat-based reading every other
-            cell already does (see isNegative above) rather than a shared
-            toNumber helper -- treats a non-numeric/missing value as 0 so
-            one blank row can't NaN the whole total. Only money columns are
-            meaningful to sum here (A PL/B PL both are), so formatting
-            mirrors a normal money cell (formatMoney + red-if-negative);
-            every other column just gets a blank cell, with "Sum" labeling
-            the row in the first column instead. */}
-        {sumColumns && sumColumns.length > 0 && (
-          <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-            <tr>
-              {cols.map((col, i) => {
-                if (!sumColumns.includes(col.key)) {
-                  return (
-                    <td
-                      key={col.key}
-                      className={`whitespace-nowrap px-3 py-2 ${col.numeric ? "text-right" : "text-left"}`}
-                    >
-                      {i === 0 ? "Sum" : ""}
-                    </td>
-                  )
-                }
-                const total = rows.reduce((acc, row) => acc + (parseFloat(row[col.key]) || 0), 0)
-                const negative = col.money && total < 0
-                return (
-                  <td
-                    key={col.key}
-                    className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
-                      negative ? "text-red-600" : "text-slate-800"
-                    }`}
-                  >
-                    {col.money ? formatMoney(total) : total}
-                  </td>
-                )
-              })}
-            </tr>
-          </tfoot>
-        )}
       </table>
     </div>
   )
