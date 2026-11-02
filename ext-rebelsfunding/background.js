@@ -1221,7 +1221,17 @@ async function scrapeAccount(scanTabId, acc, tradeMinPlPct) {
   // fnScrapePositions), not computed from Equity-Balance -- left blank if
   // RF-Trader couldn't be reached at all, rather than derived.
 
-  const isRealMoney = /fund/i.test(acc.program || '') ? 'Yes' : 'No';
+  // Confirmed live (Tuan, 2026-11-02) that a real Funded account's
+  // "program" field is just its tier name ("Silver"/"Bronze"/etc, see
+  // fnParseAccounts), never anything containing "fund" -- /fund/i against
+  // acc.program always read 'No', even for real Funded accounts (RF
+  // Client Zone's own "Funded" tab screenshot showed RCF-683-54097/
+  // RCF-407-42579 as the 2 real Funded accounts, both misclassified this
+  // way). acc.tab is the reliable signal instead -- 'Challenge'/'Funded'/
+  // 'Free Trial', already captured per account by fnParseAccounts and
+  // already relied on elsewhere in this file (see the acc.tab tab-click
+  // logic above).
+  const isRealMoney = acc.tab === 'Funded' ? 'Yes' : 'No';
 
   const base = {
     SnapshotDate: fmtDate(new Date()),
