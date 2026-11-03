@@ -107,7 +107,7 @@ export const MAINVIEW_COLUMNS = [
   // plain (no highlightIf/background) since it isn't itself a warning
   // signal the way A_TargetEquity/A_Equity are.
   { key: "A_Balance", label: "A Bal", money: true },
-  { key: "A_TargetEquity", label: "A Target Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
+  { key: "A_TargetEquity", label: "A Target\nEquity", money: true, width: "min-w-[6.5rem]", headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
   { key: "A_Equity", label: "A Equity", money: true, headerBg: "bg-violet-900", columnBg: "bg-violet-200" },
   { key: "A_PLPct", label: "A PL %", numeric: true, pct: true, highlightIf: (row) => row.A_PLPctWarning },
   // Labels contain a literal "\n", broken after the first word (e.g. "Max\n
