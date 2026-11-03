@@ -117,8 +117,13 @@ export const MAINVIEW_COLUMNS = [
   // to a 3rd/4th.
   { key: "A_MaxDailyDrawdown", label: "Max\nDaily DD", money: true, width: "min-w-[6.5rem]", highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
   { key: "A_TodayDrawdown", label: "Cur\nDaily DD", money: true, width: "min-w-[6.5rem]", highlightIf: (row) => row.A_DailyDrawdownWarning, headerBg: "bg-amber-900", columnBg: "bg-amber-50" },
-  { key: "A_MaxDailyDrawdownPct", label: "Max\nDaily DD %", numeric: true, pct: true, width: "min-w-[7rem]", headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
-  { key: "A_TodayDrawdownPct", label: "Cur\nDaily DD %", numeric: true, pct: true, width: "min-w-[7rem]", headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
+  // Line break moved from after "Max"/"Cur" to after "Daily" (Tuan,
+  // 2026-11-03) -- "Max Daily"/"Cur Daily" now sit together on the first
+  // line, "DD %" on the second, instead of a lone "Max"/"Cur" above
+  // "Daily DD %". Same min-w-[7rem] still fits -- "Max Daily" (9 chars) is
+  // no wider than the "Daily DD %" line it replaces as the long side.
+  { key: "A_MaxDailyDrawdownPct", label: "Max Daily\nDD %", numeric: true, pct: true, width: "min-w-[7rem]", headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
+  { key: "A_TodayDrawdownPct", label: "Cur Daily\nDD %", numeric: true, pct: true, width: "min-w-[7rem]", headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
   { key: "A_MaxDrawdownAmount", label: "Max DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
   { key: "A_CurrentValueAmount", label: "Cur DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
   { key: "A_ProfitTarget", label: "A Target PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
