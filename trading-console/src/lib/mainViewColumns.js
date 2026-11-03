@@ -130,7 +130,9 @@ export const MAINVIEW_COLUMNS = [
   { key: "A_AccountPL", label: "A PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "B_SymbolPL", label: "B PL", money: true },
   { key: "B_TotalSize", label: "B Size", numeric: true },
-  { key: "B_Platform", label: "B Plat" },
+  // B_Platform ("B Plat") hidden (Tuan, 2026-11-03) -- same "hidden here
+  // rather than removed from compute.js" pattern as A_StopLossRiskAmount/
+  // A_StopLossRiskPct above, so it's easy to bring back later.
   { key: "Note", label: "Note" },
 ]
 
