@@ -471,12 +471,20 @@ export function computeMainView(
       B_Direction: r ? r.Direction : "",
       B_TotalSize: r ? r.TotalSize : "",
       B_SymbolPL: r ? r.SymbolPL : "",
-      // "B SL/TP" -- same tpSlLabel used for the A side's TP/SL column,
+      // "B TP/SL" -- same tpSlLabel used for the A side's TP/SL column,
       // just off the matched B-side symbol group's own hasTakeProfit/
       // hasStopLoss (see computeAccountLog above) instead of the A-side
       // account's. Blank (not "") when there's no matched B-side row at
       // all, same as every other B_ field here.
       B_TPSL: r ? tpSlLabel(r.hasTakeProfit, r.hasStopLoss) : "",
+      // B_TPSLWarning (Tuan, 2026-11-03) -- same "Warning TP/SL" alert as
+      // A_TPSLWarning, applied to the matched B-side symbol group: flags
+      // when it has an open position (Symbol isn't the "n/a" placeholder)
+      // but neither a Take Profit nor a Stop Loss is set on any of it.
+      // Simpler than A_TPSLWarning -- no B-side equivalent of the extra
+      // "SL missing during a Daily Drawdown warning" clause, since B-side
+      // rows carry no Daily Drawdown figures at all.
+      B_TPSLWarning: !!(r && r.Symbol !== "n/a" && !r.hasTakeProfit && !r.hasStopLoss),
       // Not rendered as a table column -- consumed by the edit form to know
       // which existing rule (symbol-specific, blanket, or none) it would be
       // replacing on save. `null` means a blanket rule matched (or none did

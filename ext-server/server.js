@@ -86,7 +86,11 @@ const CONFIG_MIRROR_FILE = path.join(FRONTEND_DATA_DIR, 'config.json');
 //       "targetPL": true,
 //       "plPct": true,
 //       "tpsl": true    // mirrors MainView's "Warning TP/SL" highlight --
-//                        // see WARNING_METRICS' tpsl entry below
+//                        // one toggle covers BOTH the A-side metric
+//                        // (WARNING_METRICS) and the B-side one
+//                        // (B_SIDE_WARNING_METRICS) -- same key, same
+//                        // "no TP/SL set" alert, just evaluated against
+//                        // each side's own accounts.
 //     },
 //     "tiers": {        // optional -- multi-rung ladder per metric, overrides
 //                        // that metric's single "thresholds" value above.
@@ -740,6 +744,25 @@ const B_SIDE_WARNING_METRICS = [
     message: (row, _tierPct, thresholds) =>
       `Available $${row.Available} has dropped below Min B-Side's Available $${thresholds.minBSideAvailable}.`,
   },
+  {
+    // "B TP/SL" (Tuan, 2026-11-03) -- mirrors the A-side 'tpsl' metric
+    // above: SAME key ('tpsl'), so notify-config.json's single
+    // "Warning TP/SL" toggle mutes/unmutes both at once, and SAME
+    // thresholdKey/tpslPct fixed single-rung ladder. Simpler condition
+    // than A's tpslWarning() though -- B-side has no Daily Drawdown
+    // concept, so this only ever flags "no Take Profit AND no Stop Loss
+    // set on any open position", never A's extra SL-missing-during-a-
+    // drawdown clause. row._hasOpenPosition comes from collectBSideAccounts
+    // (unlike bSideAvailable above, this metric needs it -- an account
+    // with nothing open has nothing to have a TP/SL on).
+    key: 'tpsl',
+    thresholdKey: 'tpslPct',
+    label: 'TP/SL',
+    priority: 1,
+    sound: 'siren',
+    value: (row) => (row._hasOpenPosition && !row._hasTakeProfit && !row._hasStopLoss ? 100 : null),
+    message: () => 'No Take Profit or Stop Loss set on any open position.',
+  },
 ];
 
 // Never throws -- every failure mode (missing config, API error, network
@@ -864,12 +887,16 @@ function collectASideAccounts(dataSource) {
 // repricing Latest/PositionPL/Equity on open positions) has no bearing on
 // them and may not even carry these columns through.
 //
-// Unlike collectASideAccounts, does NOT skip an account with no open
-// position -- a flat B-side account's Available is exactly the figure Min
-// B-Side's Available exists to watch (see buildTastyfxRows' placeholder-row
-// comment: a flat account still gets one row here with real account-level
-// figures, specifically so this doesn't go blind the moment tastyfx goes
-// flat).
+// Unlike collectASideAccounts, the CALLER doesn't skip an account with no
+// open position -- a flat B-side account's Available is exactly the figure
+// Min B-Side's Available exists to watch (see buildTastyfxRows'
+// placeholder-row comment: a flat account still gets one row here with
+// real account-level figures, specifically so this doesn't go blind the
+// moment tastyfx goes flat). _hasOpenPosition is still aggregated here
+// (same as collectASideAccounts) so a metric that DOES care -- the B-side
+// 'tpsl' entry below, added alongside "B TP/SL" (Tuan, 2026-11-03) -- can
+// gate on it itself inside its own value(), same two-threshold-keys-style
+// per-metric opt-in as everything else in this file.
 function collectBSideAccounts() {
   const rawRows = PLATFORM_ORDER.flatMap((platformKey) => platformRows[platformKey]);
 
@@ -877,7 +904,11 @@ function collectBSideAccounts() {
   for (const row of rawRows) {
     if (NOTIFY_A_SIDE_PLATFORMS.has(row.Platform)) continue;
     const key = `${row.Platform}|${row.AccountID}`;
-    if (!seen.has(key)) seen.set(key, row);
+    if (!seen.has(key)) seen.set(key, { ...row, _hasTakeProfit: false, _hasStopLoss: false, _hasOpenPosition: false });
+    const acct = seen.get(key);
+    if (row.TakeProfitPrice && row.TakeProfitPrice !== 'none') acct._hasTakeProfit = true;
+    if (row.StopLossPrice && row.StopLossPrice !== 'none') acct._hasStopLoss = true;
+    if (row.Symbol && row.Symbol !== 'n/a') acct._hasOpenPosition = true;
   }
   return [...seen.values()];
 }

@@ -136,7 +136,7 @@ export const MAINVIEW_COLUMNS = [
   // mapping); this just surfaces it as a column the same way A's "TP/SL"
   // does, off B_TPSL (see compute.js's B_TPSL/tpSlLabel). No highlightIf of
   // its own, same as A_Phase -- just a plain reference cell for now.
-  { key: "B_TPSL", label: "B SL/TP" },
+  { key: "B_TPSL", label: "B TP/SL", highlightIf: (row) => row.B_TPSLWarning },
   // B_Platform ("B Plat") hidden (Tuan, 2026-11-03) -- same "hidden here
   // rather than removed from compute.js" pattern as A_StopLossRiskAmount/
   // A_StopLossRiskPct above, so it's easy to bring back later.
@@ -145,15 +145,19 @@ export const MAINVIEW_COLUMNS = [
 
 /**
  * AccountViewPage/MarketViewPage's own columns -- MAINVIEW_COLUMNS above,
- * with A_TPSL's highlightIf swapped out for `undefined` when the "Warning
- * TP/SL" Settings toggle is off, rather than baking the toggle into the
- * predicate itself (keeps MAINVIEW_COLUMNS' own highlightIf a pure function
- * of the row, same pattern as every other column). Called independently by
- * each of AccountViewPage/MarketViewPage rather than computed once in
- * App.jsx and passed down -- both read the same useWarningTPSLEnabled()
- * localStorage-backed setting, and since only one tab is ever mounted at a
- * time (see App.jsx's `active` state), there's no risk of the two getting
- * out of sync with each other or with the Settings page.
+ * with A_TPSL's AND B_TPSL's highlightIf both swapped out for `undefined`
+ * when the "Warning TP/SL" Settings toggle is off, rather than baking the
+ * toggle into either predicate itself (keeps MAINVIEW_COLUMNS' own
+ * highlightIf a pure function of the row, same pattern as every other
+ * column). One toggle covers both columns -- same as ext-server's single
+ * notify-config.json "tpsl" metrics flag covering both the A-side and
+ * B-side Pushover alerts (Tuan, 2026-11-03) -- rather than a second
+ * B-specific setting. Called independently by each of AccountViewPage/
+ * MarketViewPage rather than computed once in App.jsx and passed down --
+ * both read the same useWarningTPSLEnabled() localStorage-backed setting,
+ * and since only one tab is ever mounted at a time (see App.jsx's `active`
+ * state), there's no risk of the two getting out of sync with each other
+ * or with the Settings page.
  */
 export function useMainViewColumns() {
   const [warningTPSLEnabled] = useWarningTPSLEnabled()
@@ -161,7 +165,9 @@ export function useMainViewColumns() {
     () =>
       warningTPSLEnabled
         ? MAINVIEW_COLUMNS
-        : MAINVIEW_COLUMNS.map((col) => (col.key === "A_TPSL" ? { ...col, highlightIf: undefined } : col)),
+        : MAINVIEW_COLUMNS.map((col) =>
+            col.key === "A_TPSL" || col.key === "B_TPSL" ? { ...col, highlightIf: undefined } : col
+          ),
     [warningTPSLEnabled]
   )
 }
