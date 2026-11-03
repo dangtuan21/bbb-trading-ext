@@ -80,7 +80,7 @@ export const MAINVIEW_COLUMNS = [
   // compute.js/matchRules.js/hiddenAccounts.js) match against -- renaming
   // the actual data would break every one of those. FTMO/AlphaCapital are
   // already short enough and stay as-is.
-  { key: "A_Platform", label: "A Plat", format: (v) => (v === "RebelsFunding" ? "RF" : v) },
+  { key: "A_Platform", label: "A", format: (v) => (v === "RebelsFunding" ? "RF" : v) },
   { key: "A_AccountID", label: "A Account ID", link: true },
   // RebelsFunding-only ("1"/"2"/etc, from RF Client Zone's own accounts
   // list -- see Phase in ext-rebelsfunding/background.js); blank for
