@@ -93,7 +93,7 @@ export const MAINVIEW_COLUMNS = [
   // fnScrapeClosedTradesPagePlPercents in ext-rebelsfunding/background.js
   // for the actual formula). RebelsFunding-only, same as A_Phase. Blank
   // for FTMO/AlphaCapital/tastyfx rows.
-  { key: "A_TotalTrades", label: "A Trades", numeric: true },
+  { key: "A_TotalTrades", label: "A #", numeric: true },
   { key: "A_Symbol", label: "A Symbol" },
   { key: "A_Direction", label: "A Dir" },
   { key: "A_TotalSize", label: "A Size", numeric: true },
