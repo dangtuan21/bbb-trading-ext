@@ -130,6 +130,13 @@ export const MAINVIEW_COLUMNS = [
   { key: "A_AccountPL", label: "A PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "B_SymbolPL", label: "B PL", money: true },
   { key: "B_TotalSize", label: "B Size", numeric: true },
+  // "B SL/TP" (Tuan, 2026-11-03) -- tastyfx (ext-tastyfx/content.js) has
+  // scraped per-position stopLoss/takeProfit into StopLossPrice/
+  // TakeProfitPrice all along (see ext-server/server.js's tastyfx row
+  // mapping); this just surfaces it as a column the same way A's "TP/SL"
+  // does, off B_TPSL (see compute.js's B_TPSL/tpSlLabel). No highlightIf of
+  // its own, same as A_Phase -- just a plain reference cell for now.
+  { key: "B_TPSL", label: "B SL/TP" },
   // B_Platform ("B Plat") hidden (Tuan, 2026-11-03) -- same "hidden here
   // rather than removed from compute.js" pattern as A_StopLossRiskAmount/
   // A_StopLossRiskPct above, so it's easy to bring back later.

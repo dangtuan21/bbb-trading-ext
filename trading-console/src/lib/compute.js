@@ -39,6 +39,8 @@ export function computeAccountLog(rows) {
         directions: new Set(),
         totalSize: 0,
         symbolPL: 0,
+        hasTakeProfit: false,
+        hasStopLoss: false,
       })
     }
     const g = groups.get(key)
@@ -49,6 +51,14 @@ export function computeAccountLog(rows) {
 
     const pl = toNumber(row.PositionPL)
     if (pl !== null) g.symbolPL += pl
+
+    // Same aggregate-across-positions approach as MainView's left-side
+    // hasTakeProfit/hasStopLoss above (TotalTrades/B_TPSL -- Tuan,
+    // 2026-11-03): a symbol group with multiple open positions is flagged
+    // true if ANY of them has a TP/SL set. "none" is every platform's
+    // sentinel for "not set".
+    if (row.TakeProfitPrice && row.TakeProfitPrice !== "none") g.hasTakeProfit = true
+    if (row.StopLossPrice && row.StopLossPrice !== "none") g.hasStopLoss = true
   }
 
   return [...groups.values()].map((g) => ({
@@ -62,6 +72,8 @@ export function computeAccountLog(rows) {
     Direction: g.directions.size ? [...g.directions].join(", ") : "n/a",
     TotalSize: round2(g.totalSize),
     SymbolPL: round2(g.symbolPL),
+    hasTakeProfit: g.hasTakeProfit,
+    hasStopLoss: g.hasStopLoss,
   }))
 }
 
@@ -205,6 +217,8 @@ export function computeMainView(
       Direction: r.Direction,
       TotalSize: r.TotalSize,
       SymbolPL: r.SymbolPL,
+      hasTakeProfit: r.hasTakeProfit,
+      hasStopLoss: r.hasStopLoss,
     }))
 
   // ruleMap key: "A_Platform|A_AccountID|A_Symbol" (normalized) -> target,
@@ -457,6 +471,12 @@ export function computeMainView(
       B_Direction: r ? r.Direction : "",
       B_TotalSize: r ? r.TotalSize : "",
       B_SymbolPL: r ? r.SymbolPL : "",
+      // "B SL/TP" -- same tpSlLabel used for the A side's TP/SL column,
+      // just off the matched B-side symbol group's own hasTakeProfit/
+      // hasStopLoss (see computeAccountLog above) instead of the A-side
+      // account's. Blank (not "") when there's no matched B-side row at
+      // all, same as every other B_ field here.
+      B_TPSL: r ? tpSlLabel(r.hasTakeProfit, r.hasStopLoss) : "",
       // Not rendered as a table column -- consumed by the edit form to know
       // which existing rule (symbol-specific, blanket, or none) it would be
       // replacing on save. `null` means a blanket rule matched (or none did
