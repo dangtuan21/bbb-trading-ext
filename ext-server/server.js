@@ -381,14 +381,35 @@ function writeCombined() {
 // "any rule for this account" -- a symbol-specific and a blanket rule can
 // coexist for the same account, so this must distinguish them exactly the
 // same way trading-console's matchRules.js parses "A-position".
+//
+// Returns the LAST matching index, not the first -- confirmed live (Tuan,
+// 2026-11-09) that two duplicate blanket entries for the same account
+// (same "A-position", different Note) can coexist in config.json, e.g. a
+// save that landed via push (new entry appended) instead of a replace. When
+// that happens, trading-console's compute.js builds ruleMap/ruleMapByAccount
+// by calling Map.set(accountKey, target) for every rule IN ARRAY ORDER, so
+// a later duplicate always overwrites an earlier one there -- "last wins"
+// is what MainView actually displays and what the edit form's Note field
+// gets pre-filled from. findIndex's old first-match behavior meant Save
+// kept updating the OTHER (first, hidden) duplicate instead -- the Note you
+// could see on screen never changed, because every edit was silently
+// landing on an entry you couldn't see. Matching compute.js's last-wins
+// semantics here means Save (and Delete) always act on the same entry
+// MainView is actually showing, duplicates or not.
+function ruleMatches(entry, platform, accountId, symbol) {
+  const parts = String(entry?.['A-position'] || '').split('|').map((s) => s.trim());
+  if (parts.length !== 2 && parts.length !== 3) return false;
+  if (parts[0] !== platform || parts[1] !== accountId) return false;
+  const entrySymbol = parts.length === 3 && parts[2] ? parts[2] : null;
+  return entrySymbol === symbol;
+}
+
 function findRuleIndex(rules, platform, accountId, symbol) {
-  return rules.findIndex((entry) => {
-    const parts = String(entry?.['A-position'] || '').split('|').map((s) => s.trim());
-    if (parts.length !== 2 && parts.length !== 3) return false;
-    if (parts[0] !== platform || parts[1] !== accountId) return false;
-    const entrySymbol = parts.length === 3 && parts[2] ? parts[2] : null;
-    return entrySymbol === symbol;
+  let found = -1;
+  rules.forEach((entry, i) => {
+    if (ruleMatches(entry, platform, accountId, symbol)) found = i;
   });
+  return found;
 }
 
 // Builds/replaces one position-rule entry from a MainView edit and writes
@@ -420,9 +441,31 @@ function applyRuleEdit(payload) {
   }
 
   const hasOriginal = Object.prototype.hasOwnProperty.call(payload, 'originalASymbol');
-  const idx = hasOriginal
-    ? findRuleIndex(rules, payload.aPlatform, payload.aAccountId, payload.originalASymbol ?? null)
-    : -1;
+  let idx = -1;
+  if (hasOriginal) {
+    const originalSymbol = payload.originalASymbol ?? null;
+    // Collapse every entry matching this exact platform+accountId+
+    // originalASymbol down to one before replacing, not just the single
+    // (last-wins) one findRuleIndex would normally return -- confirmed
+    // live (Tuan, 2026-11-09) that two duplicate blanket entries for the
+    // same account can coexist in config.json (different Note text on
+    // each), which left Save silently editing a different, hidden entry
+    // than the one MainView actually displayed (see findRuleIndex's own
+    // comment for the full mechanism). Keeps the LAST match's position
+    // (same "last wins" semantics trading-console's compute.js already
+    // uses for display), removes every earlier duplicate, so any leftover
+    // duplicate self-heals the next time that rule is edited instead of
+    // accumulating forever.
+    const matches = [];
+    rules.forEach((r, i) => {
+      if (ruleMatches(r, payload.aPlatform, payload.aAccountId, originalSymbol)) matches.push(i);
+    });
+    if (matches.length > 0) {
+      const lastIdx = matches[matches.length - 1];
+      for (let k = matches.length - 2; k >= 0; k--) rules.splice(matches[k], 1);
+      idx = lastIdx - (matches.length - 1);
+    }
+  }
   if (idx >= 0) {
     rules[idx] = entry;
   } else {
