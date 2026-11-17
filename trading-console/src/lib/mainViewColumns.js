@@ -132,7 +132,13 @@ export const MAINVIEW_COLUMNS = [
   // easy to bring back later. MAINVIEW_COLUMNS is shared by both
   // AccountViewPage and MarketViewPage (see this file's own top comment),
   // so this hides it from both, not just AccountView.
-  { key: "A_AccountPL", label: "A PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
+  // highlightIf also fires on A_MaxLossPerTradeWarning (Tuan, 2026-11-17)
+  // -- the account's loss has reached Settings' configured Max Loss % Per
+  // Trade for its platform -- alongside the pre-existing A_TargetProfitWarning
+  // (profit closing in on target), so the same cell blinks for either a
+  // "getting close to a loss limit" or "getting close to a profit goal"
+  // reason.
+  { key: "A_AccountPL", label: "A PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning || row.A_MaxLossPerTradeWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "B_SymbolPL", label: "B PL", money: true },
   { key: "B_TotalSize", label: "B Size", numeric: true },
   // "B SL/TP" (Tuan, 2026-11-03) -- tastyfx (ext-tastyfx/content.js) has

@@ -5,7 +5,16 @@ import {
   DEFAULT_WARNING_DAILY_DRAWDOWN_PCT,
   DEFAULT_WARNING_DRAWDOWN_PCT,
   DEFAULT_WARNING_TARGET_PROFIT_PCT,
+  DEFAULT_MAX_LOSS_PER_TRADE,
 } from "./settings"
+
+// Maps a scraped A_Platform value to Settings' per-platform Max Loss %
+// Per Trade keys (RF/FTMO/AC -- see useMaxLossPerTrade in settings.js).
+// Settings' own abbreviated keys never appear in the row data itself
+// (A_SIDE_PLATFORMS/matchRules/hiddenAccounts all match on the full
+// "RebelsFunding"/"FTMO"/"AlphaCapital" names), so this is the one place
+// that bridges the two.
+const MAX_LOSS_PLATFORM_CODE = { RebelsFunding: "RF", FTMO: "FTMO", AlphaCapital: "AC" }
 
 function toNumber(value) {
   const n = parseFloat(value)
@@ -109,7 +118,8 @@ export function computeMainView(
   warningDailyDrawdownPct = DEFAULT_WARNING_DAILY_DRAWDOWN_PCT,
   warningDrawdownPct = DEFAULT_WARNING_DRAWDOWN_PCT,
   warningTargetProfitPct = DEFAULT_WARNING_TARGET_PROFIT_PCT,
-  hiddenAccounts = []
+  hiddenAccounts = [],
+  maxLossPerTrade = DEFAULT_MAX_LOSS_PER_TRADE
 ) {
   const hiddenKeys = new Set(hiddenAccounts.map((h) => `${h.platform}|${h.accountId}`))
   const leftGroups = new Map()
@@ -386,6 +396,20 @@ export function computeMainView(
     // no-position account (hasTakeProfit/hasStopLoss are both false with
     // nothing open) even though there's no position to have a TP/SL on.
     const hasOpenPosition = l.Symbol !== "n/a"
+    // Flags the A PL cell once this account's current loss (AccountPL,
+    // negative while losing) reaches the configured Max Loss % Per Trade
+    // for its platform, expressed as a % of Balance -- same denominator
+    // A_StopLossRiskPct uses, so it's comparable the same way across
+    // accounts. 0 (Settings' "not configured" default for FTMO/
+    // AlphaCapital, see DEFAULT_MAX_LOSS_PER_TRADE) disables the check
+    // entirely rather than flagging on the slightest loss.
+    const maxLossPerTradePct = maxLossPerTrade[MAX_LOSS_PLATFORM_CODE[l.Platform]] || 0
+    const accountPLPctOfBalance = pctOf(l.AccountPL, l.Balance)
+    const maxLossPerTradeWarning =
+      hasOpenPosition &&
+      maxLossPerTradePct > 0 &&
+      accountPLPctOfBalance !== "" &&
+      accountPLPctOfBalance <= -maxLossPerTradePct
     joined.push({
       A_Platform: l.Platform,
       A_AccountID: l.AccountID,
@@ -460,6 +484,10 @@ export function computeMainView(
       // configured % -- a direct value-vs-threshold check (A_PLPct is
       // already a percentage), unlike the ratio-of-two-amounts checks above.
       A_PLPctWarning: hasOpenPosition && isPctWarning(plPct, warningTargetProfitPct),
+      // Flags the A PL cell once the account's loss reaches the configured
+      // Max Loss % Per Trade for its platform -- see maxLossPerTradeWarning
+      // above.
+      A_MaxLossPerTradeWarning: maxLossPerTradeWarning,
       Note: ruleTarget && ruleTarget.note !== null ? ruleTarget.note : "",
       B_Platform: r ? r.Platform : "",
       B_AccountID: r ? r.AccountID : "",
