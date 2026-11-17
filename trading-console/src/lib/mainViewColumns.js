@@ -126,7 +126,12 @@ export const MAINVIEW_COLUMNS = [
   { key: "A_TodayDrawdownPct", label: "Cur Daily\nDD %", numeric: true, pct: true, width: "min-w-[7rem]", headerBg: "bg-rose-900", columnBg: "bg-rose-100" },
   { key: "A_MaxDrawdownAmount", label: "Max DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
   { key: "A_CurrentValueAmount", label: "Cur DD", money: true, highlightIf: (row) => row.A_MaxDrawdownWarning, headerBg: "bg-sky-900", columnBg: "bg-sky-100" },
-  { key: "A_ProfitTarget", label: "A Target PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
+  // A_ProfitTarget ("A Target PL") hidden (Tuan, 2026-11-17) -- same
+  // "hidden here rather than removed from compute.js" pattern as
+  // A_StopLossRiskAmount/A_StopLossRiskPct and B_Platform above, so it's
+  // easy to bring back later. MAINVIEW_COLUMNS is shared by both
+  // AccountViewPage and MarketViewPage (see this file's own top comment),
+  // so this hides it from both, not just AccountView.
   { key: "A_AccountPL", label: "A PL", money: true, highlightIf: (row) => row.A_TargetProfitWarning, headerBg: "bg-emerald-900", columnBg: "bg-emerald-50" },
   { key: "B_SymbolPL", label: "B PL", money: true },
   { key: "B_TotalSize", label: "B Size", numeric: true },
