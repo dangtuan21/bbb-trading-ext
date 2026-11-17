@@ -8,6 +8,7 @@ import {
   useMinTrades,
   useOverWeekend,
   useMinBSideAvailable,
+  useMaxLossPerTrade,
 } from "../lib/settings"
 import { useConfigView, notifyConfigChanged } from "../lib/useConfigView"
 
@@ -38,6 +39,49 @@ function ThresholdField({ id, label, value, onChange }) {
           min="1"
           max="100"
           step="1"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-right text-sm"
+        />
+        <span className="text-sm text-slate-500">%</span>
+      </div>
+    </div>
+  )
+}
+
+// Same shape/markup as ThresholdField (decimals allowed, "%" suffix), but
+// allows 0 (n >= 0 rather than n > 0) -- used by Max Loss % Per Trade
+// below, where FTMO/AlphaCapital default to 0 meaning "not configured yet"
+// and should stay settable back to 0, the same way Min Trades' CountField
+// allows 0 for its own not-configured platforms. ThresholdField itself is
+// left requiring a strictly positive value for its existing callers
+// (Daily Drawdown %, etc.), where 0 would never be a meaningful threshold.
+function PercentField({ id, label, value, onChange }) {
+  const [text, setText] = useState(String(value))
+
+  function commit(raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0 && n <= 100) {
+      onChange(n)
+      setText(String(n))
+    } else {
+      setText(String(value))
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-[200px_1fr] items-center gap-x-4 gap-y-1">
+      <label htmlFor={id} className="text-sm font-medium text-slate-600">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={id}
+          type="number"
+          min="0"
+          max="100"
+          step="0.1"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={(e) => commit(e.target.value)}
@@ -423,6 +467,40 @@ function MinTradesSection() {
   )
 }
 
+// "Max Loss % Per Trade" -- same per-platform (RF/FTMO/AC) card layout as
+// MinTradesSection above, but built from PercentField rather than
+// CountField since a per-trade risk cap is a percentage with decimals
+// (e.g. RebelsFunding's 1.2%), not a whole-number count.
+function MaxLossPerTradeSection() {
+  const [maxLossPerTrade, setMaxLossPerTradePlatform] = useMaxLossPerTrade()
+
+  return (
+    <div className="max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold text-slate-700">Max Loss % Per Trade</h3>
+      <div className="flex flex-col gap-4">
+        <PercentField
+          id="max-loss-per-trade-rf"
+          label="RebelsFunding"
+          value={maxLossPerTrade.RF}
+          onChange={(n) => setMaxLossPerTradePlatform("RF", n)}
+        />
+        <PercentField
+          id="max-loss-per-trade-ftmo"
+          label="FTMO"
+          value={maxLossPerTrade.FTMO}
+          onChange={(n) => setMaxLossPerTradePlatform("FTMO", n)}
+        />
+        <PercentField
+          id="max-loss-per-trade-ac"
+          label="AlphaCapital"
+          value={maxLossPerTrade.AC}
+          onChange={(n) => setMaxLossPerTradePlatform("AC", n)}
+        />
+      </div>
+    </div>
+  )
+}
+
 // Settings has no CSV fetch of its own (nothing to be "loading" or
 // "error" here, unlike every other tab -- see those pages' own PageHeader
 // usage), so it renders a plain title rather than pulling in PageHeader's
@@ -546,6 +624,7 @@ export default function SettingsPage() {
         </div>
       </div>
       <MinTradesSection />
+      <MaxLossPerTradeSection />
       <OverWeekendSection />
       <MinBSideAvailableSection value={minBSideAvailable} onChange={setMinBSideAvailable} />
       <TradeMinPlSection />

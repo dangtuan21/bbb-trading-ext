@@ -247,3 +247,42 @@ export function useOverWeekend() {
 
   return [overWeekend, updatePlatform]
 }
+
+// "Max Loss % Per Trade" per platform -- same group-of-three shape as Min
+// Trades/Over Weekend above, but a percentage (decimals allowed) rather
+// than an integer count, since a per-trade risk cap like "1.2%" doesn't
+// round to a whole number. Per Tuan (2026-11-17): RebelsFunding=1.2;
+// FTMO/AlphaCapital default to 0 (unset) same as Min Trades' non-RF
+// defaults. Same "just stored here for now, nothing reads it yet" scope
+// as Min Trades/Over Weekend -- no warning/highlight wired to it.
+const MAX_LOSS_PER_TRADE_STORAGE_KEY = "maxLossPerTradeByPlatform"
+export const DEFAULT_MAX_LOSS_PER_TRADE = { RF: 1.2, FTMO: 0, AC: 0 }
+
+function readStoredMaxLossPerTrade() {
+  const raw = localStorage.getItem(MAX_LOSS_PER_TRADE_STORAGE_KEY)
+  if (!raw) return DEFAULT_MAX_LOSS_PER_TRADE
+  try {
+    const parsed = JSON.parse(raw)
+    return { ...DEFAULT_MAX_LOSS_PER_TRADE, ...parsed }
+  } catch {
+    return DEFAULT_MAX_LOSS_PER_TRADE
+  }
+}
+
+/**
+ * Max Loss % Per Trade per platform (RF/FTMO/AC) -- see
+ * MAX_LOSS_PER_TRADE_STORAGE_KEY above. Same shape/persistence as
+ * useMinTrades: returns the full {RF, FTMO, AC} object plus a setter that
+ * updates one platform at a time (`updatePlatform("RF", 1.2)`).
+ */
+export function useMaxLossPerTrade() {
+  const [maxLossPerTrade, setMaxLossPerTrade] = useState(readStoredMaxLossPerTrade)
+
+  function updatePlatform(platform, value) {
+    const next = { ...maxLossPerTrade, [platform]: value }
+    setMaxLossPerTrade(next)
+    localStorage.setItem(MAX_LOSS_PER_TRADE_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  return [maxLossPerTrade, updatePlatform]
+}
