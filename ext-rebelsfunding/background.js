@@ -777,7 +777,16 @@ function fnScrapeContestStats() {
     // comment above for why.
     maxDailyDrawdownPct: pctOfBase(dailyBlock.limitAmount, startingEquity),
     todayDrawdown: dailyBlock.usedAmount,
-    todayDrawdownPct: dailyBlock.ratioPct,
+    // Today's Drawdown as % of Today's Starting Equity (Tuan, 2026-11-19:
+    // "I prefer ≈ 1.6%" over the page's own displayed ratio) -- NOT
+    // dailyBlock.ratioPct (the page's own "Used / allowed limit" %, which
+    // is Today's Drawdown / Max Daily Drawdown's $ LIMIT, a much bigger-
+    // looking number for the same loss, e.g. 31.6% vs 1.6% on the same
+    // $639 loss). This restores the pre-redesign definition (see the old
+    // comment this replaced: "Today's Drawdown / Today's Starting
+    // Equity"), which the UI redesign's own on-page % silently changed
+    // away from.
+    todayDrawdownPct: pctOfBase(dailyBlock.usedAmount, startingEquity),
     maxDrawdownAmount: overallBlock.limitAmount,
     maxDrawdownPct: pctOfBase(overallBlock.limitAmount, initialBalance),
     currentValueAmount: overallBlock.usedAmount,
