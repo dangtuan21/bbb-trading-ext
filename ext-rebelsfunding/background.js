@@ -642,12 +642,39 @@ function fnClickPositionsTab() {
   return null;
 }
 
-// Reads Initial Balance / Starting Equity / Max Daily Drawdown / Today's
-// Drawdown off the "Contest stats" tab (same tab bar as "Positions", within
-// the same frame -- see fnCheckPositionsFrame). Label-based, same tolerant
-// "label and value either on the same line or the next one" approach as
-// fnScrapeBalanceEquity, since this renders as plain DOM text like every
-// other RF-Trader panel (confirmed live via a real screenshot), not canvas.
+// Forces the Contest stats panel's own "USD"/"%" display toggle (top-right
+// of the Max Daily Drawdown/Max Drawdown bars) to USD before scraping --
+// confirmed live 2026-11-18 that RF-Trader remembers whichever mode was
+// last selected, so without this, fnScrapeContestStats's $ parsing would
+// silently read percentages as dollars whenever a previous visit (or the
+// user themselves) left it on "%". Idempotent via aria-pressed -- a no-op,
+// not an extra click, when USD is already active.
+function fnClickUsdToggle() {
+  const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'USD');
+  if (!btn) return 'not-found';
+  if (btn.getAttribute('aria-pressed') === 'true') return 'already-usd';
+  btn.click();
+  return 'clicked';
+}
+
+// Reads Initial Balance / Today's Starting Equity / Max Daily Drawdown /
+// Max Drawdown / Profit Target off the "Contest stats" tab (same tab bar
+// as "Positions", within the same frame -- see fnCheckPositionsFrame).
+// Label-based, same tolerant "label and value either on the same line or
+// the next one" approach as fnScrapeBalanceEquity, since this renders as
+// plain DOM text (confirmed live), not canvas.
+//
+// RF-Trader's 2026-11 Contest stats redesign (confirmed live, screenshots
+// + a direct innerText read) replaced the old "label / $ amount / N %,
+// next label / $ amount / N %" 6-line pairs (Max Daily Drawdown+Today's
+// Drawdown, Max Drawdown+Current Value) with a single "Used / allowed
+// limit" bar per metric: a 5-line block (label, "<used> $", "/ <limit>
+// $", "Used / allowed limit", "<used/limit ratio> %"). "Today's
+// Drawdown"/"Current Value" no longer exist as their own labels at all --
+// both are now just the first value of their block. readLimitBlock below
+// reads that shape positionally; same "Max Drawdown can't collide with
+// Max Daily Drawdown" safeguard as before (they diverge at the 6th
+// character, "Max D[r]..." vs "Max D[a]ily...").
 function fnScrapeContestStats() {
   function moneyVal(s) {
     if (!s) return '';
@@ -659,6 +686,22 @@ function fnScrapeContestStats() {
     const m = /-?[\d,]+(?:\.\d+)?/.exec(s);
     return m ? m[0].replace(/,/g, '').trim() : '';
   }
+  // Derives a "ceiling as % of Initial Balance" figure ourselves (e.g. a
+  // $2,000 Max Daily Drawdown limit on a $40,000 account -> "5") instead
+  // of reading it off the page's own "%" toggle view -- confirmed live
+  // (2026-11-18, same account) that RF-Trader's %-mode figure for every
+  // one of these ceiling fields (Max Daily Drawdown/Max Drawdown/Profit
+  // Target) is exactly limit/InitialBalance*100, so this is identical to
+  // what toggling to "%" and re-reading would show, without the extra
+  // toggle round-trip (and without ever leaving USD mode, which the used/
+  // limit $ amounts above depend on).
+  function pctOfInitial(amount, initialBalance) {
+    const a = parseFloat(amount);
+    const b = parseFloat(initialBalance);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b === 0) return '';
+    return String(Math.round((a / b) * 10000) / 100);
+  }
+
   const text = document.body.innerText || document.body.textContent || '';
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
 
@@ -673,81 +716,72 @@ function fnScrapeContestStats() {
     return '';
   }
 
-  const todayDrawdown = moneyVal(valueAfterLabel("Today's Drawdown"));
-  // Debug aid: if this label ever stops matching (a wording change, etc.),
-  // show the text actually surrounding Max Daily Drawdown (a reliable
-  // anchor) so the real label can be read off directly instead of guessed
-  // blind -- this is exactly how "Loss on <date>" got corrected to the
-  // real, confirmed-live label "Today's Drawdown" above.
-  let maxDdContext = null;
-  if (!todayDrawdown) {
-    const maxDdIdx = lines.findIndex((l) => l.startsWith('Max Daily Drawdown'));
-    if (maxDdIdx >= 0) maxDdContext = lines.slice(maxDdIdx, maxDdIdx + 8);
+  function readLimitBlock(labelPrefix) {
+    const idx = lines.findIndex((l) => l.startsWith(labelPrefix));
+    if (idx < 0) return { idx: -1, block: [], usedAmount: '', limitAmount: '', ratioPct: '', ratioLabelOk: false };
+    const block = lines.slice(idx, idx + 5);
+    const ratioLabelOk = (block[3] || '').startsWith('Used / allowed limit');
+    return {
+      idx,
+      block,
+      usedAmount: moneyVal(block[1]),
+      limitAmount: moneyVal(block[2]),
+      ratioPct: ratioLabelOk ? pctVal(block[4]) : '',
+      ratioLabelOk,
+    };
   }
 
-  // Max Daily Drawdown % / Today's Drawdown % -- same positionally-read
-  // 6-line block shape as Max Drawdown/Current Value below (label, "$
-  // amount", "N %", next label, amount, pct). Read positionally purely to
-  // get at the two % lines; maxDailyDrawdown/todayDrawdown themselves stay
-  // on the proven valueAfterLabel path above so this addition can't
-  // regress an already-working field. Note: these are the platform's OWN
-  // percentages (Today's Drawdown / Today's Starting Equity), NOT the same
-  // ratio the dashboard's own Daily DD warning uses (Today's Drawdown / Max
-  // Daily Drawdown) -- captured as-is for reference, not fed into warning
-  // logic.
-  const maxDailyDrawdownIdx = lines.findIndex((l) => l.startsWith('Max Daily Drawdown'));
-  const maxDailyDrawdownBlock = maxDailyDrawdownIdx >= 0 ? lines.slice(maxDailyDrawdownIdx, maxDailyDrawdownIdx + 6) : [];
-  const todayDrawdownLabelOk = (maxDailyDrawdownBlock[3] || '').startsWith("Today's Drawdown");
-  const maxDailyDrawdownPct = pctVal(maxDailyDrawdownBlock[2]);
-  const todayDrawdownPct = todayDrawdownLabelOk ? pctVal(maxDailyDrawdownBlock[5]) : '';
+  const initialBalance = moneyVal(valueAfterLabel('Initial Balance'));
+  // Was "Starting Equity" pre-redesign; confirmed live 2026-11-18 the
+  // label is now "Today's Starting Equity" -- same value/meaning, just
+  // renamed (valueAfterLabel's startsWith check means the old label text
+  // would no longer match at all, silently leaving this blank).
+  const startingEquity = moneyVal(valueAfterLabel("Today's Starting Equity"));
 
-  // Contest-wide Max Drawdown / Current Value -- structurally the same
-  // 6-line block as Max Daily Drawdown / Today's Drawdown (label, "$
-  // amount", "N %", next label, amount, pct, all contiguous -- confirmed
-  // live for the daily pair). "Current Value" isn't a unique label on this
-  // page (Profit Target has its own "Current Value" row too), so this is
-  // read positionally right after "Max Drawdown" rather than searched for
-  // globally, which could match the wrong one. "Max Drawdown" itself can't
-  // collide with "Max Daily Drawdown" -- they diverge at the 6th
-  // character ("Max D[r]..." vs "Max D[a]ily...").
-  const maxDrawdownIdx = lines.findIndex((l) => l.startsWith('Max Drawdown'));
-  const maxDrawdownBlock = maxDrawdownIdx >= 0 ? lines.slice(maxDrawdownIdx, maxDrawdownIdx + 6) : [];
-  const currentValueLabelOk = (maxDrawdownBlock[3] || '').startsWith('Current Value');
+  const dailyBlock = readLimitBlock('Max Daily Drawdown');
+  const overallBlock = readLimitBlock('Max Drawdown');
 
-  // Profit Target -- same 6-line block shape as Max Drawdown/Current Value
-  // above (label, "$ amount", "N %", next label "Current Value", amount,
-  // pct -- this page has its own separate Profit Target/Current Value pair,
-  // distinct from the contest-wide Max Drawdown/Current Value pair handled
-  // above). Only the dollar amount is currently consumed (MainView's
-  // "A Target PL" column, also feeding "A Target Equity" =
-  // InitialBalance + A Target PL); the % is captured too since it's free
-  // from the same
-  // block read.
+  // Debug aid: if the daily block's used-amount line ever stops matching
+  // (a further wording/shape change), show the text actually surrounding
+  // "Max Daily Drawdown" so the real shape can be read off directly
+  // instead of guessed blind -- same debugging pattern used throughout
+  // this function pre-redesign.
+  const maxDdContext = !dailyBlock.usedAmount && dailyBlock.idx >= 0 ? lines.slice(dailyBlock.idx, dailyBlock.idx + 8) : null;
+
+  // Profit Target -- still its own simple label/value pair (confirmed
+  // live), just no longer followed by its own "Current Value" sub-row the
+  // way the two drawdown panels are (that concept seems to have moved
+  // into the "Total gain" readout above it, which isn't consumed here).
+  // Only the dollar amount was ever consumed (MainView's "A Target PL"
+  // column, also feeding "A Target Equity" = InitialBalance + A Target
+  // PL); profitTargetPct is derived the same way as the two ceiling %s
+  // above.
   const profitTargetIdx = lines.findIndex((l) => l.startsWith('Profit Target'));
-  const profitTargetBlock = profitTargetIdx >= 0 ? lines.slice(profitTargetIdx, profitTargetIdx + 6) : [];
+  const profitTarget = moneyVal(valueAfterLabel('Profit Target'));
 
   return {
-    initialBalance: moneyVal(valueAfterLabel('Initial Balance')),
-    startingEquity: moneyVal(valueAfterLabel('Starting Equity')),
-    maxDailyDrawdown: moneyVal(valueAfterLabel('Max Daily Drawdown')),
-    maxDailyDrawdownPct,
-    todayDrawdown,
-    todayDrawdownPct,
-    maxDrawdownAmount: moneyVal(maxDrawdownBlock[1]),
-    maxDrawdownPct: pctVal(maxDrawdownBlock[2]),
-    currentValueAmount: currentValueLabelOk ? moneyVal(maxDrawdownBlock[4]) : '',
-    currentValuePct: currentValueLabelOk ? pctVal(maxDrawdownBlock[5]) : '',
-    profitTarget: moneyVal(profitTargetBlock[1]),
-    profitTargetPct: pctVal(profitTargetBlock[2]),
+    initialBalance,
+    startingEquity,
+    maxDailyDrawdown: dailyBlock.limitAmount,
+    maxDailyDrawdownPct: pctOfInitial(dailyBlock.limitAmount, initialBalance),
+    todayDrawdown: dailyBlock.usedAmount,
+    todayDrawdownPct: dailyBlock.ratioPct,
+    maxDrawdownAmount: overallBlock.limitAmount,
+    maxDrawdownPct: pctOfInitial(overallBlock.limitAmount, initialBalance),
+    currentValueAmount: overallBlock.usedAmount,
+    currentValuePct: overallBlock.ratioPct,
+    profitTarget,
+    profitTargetPct: pctOfInitial(profitTarget, initialBalance),
     maxDdContext,
-    // Fires whenever the positional read above didn't land on "Today's
-    // Drawdown" as expected (line 4 of the block), so the real block layout
-    // can be read off directly -- same debugging pattern as maxDdContext.
-    todayDrawdownPctContext: maxDailyDrawdownIdx >= 0 && !todayDrawdownLabelOk ? maxDailyDrawdownBlock : null,
+    // Fires whenever the positional read above didn't land on "Used /
+    // allowed limit" as expected (line 4 of the block), so the real block
+    // layout can be read off directly -- same debugging pattern as
+    // maxDdContext.
+    todayDrawdownPctContext: dailyBlock.idx >= 0 && !dailyBlock.ratioLabelOk ? dailyBlock.block : null,
     // Same debug aid as maxDdContext, but anchored on Max Drawdown -- fires
-    // whenever the positional read above didn't land on "Current Value" as
-    // expected, so the real block layout can be read off directly.
-    maxDrawdownContext: maxDrawdownIdx >= 0 && !currentValueLabelOk ? maxDrawdownBlock : null,
+    // whenever the positional read above didn't land on "Used / allowed
+    // limit" as expected.
+    maxDrawdownContext: overallBlock.idx >= 0 && !overallBlock.ratioLabelOk ? overallBlock.block : null,
     // Fires when "Profit Target" itself was never found on the page at
     // all, so the raw surrounding text can be read off directly instead of
     // guessed blind -- same debugging pattern as maxDdContext/
@@ -946,6 +980,9 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
   const contestTabClickResult = await execInFrame(tabId, targetFrameId, fnClickTabByText, ['Contest stats']).catch(() => null);
   await sleep(1500);
   await execInFrame(tabId, targetFrameId, fnDismissModals).catch(() => {});
+  // Force USD mode before scraping -- see fnClickUsdToggle's own comment.
+  const usdToggleResult = await execInFrame(tabId, targetFrameId, fnClickUsdToggle).catch(() => null);
+  await sleep(300);
   const contestStats = await execInFrame(tabId, targetFrameId, fnScrapeContestStats).catch(() => ({
     initialBalance: '', startingEquity: '', maxDailyDrawdown: '', maxDailyDrawdownPct: '',
     todayDrawdown: '', todayDrawdownPct: '',
@@ -982,6 +1019,7 @@ async function scrapeRfTraderPositions(tabId, expectedAccountId) {
     diag: {
       targetFrameId,
       contestTabClickResult,
+      usdToggleResult,
       clickResult,
       rowCount: scraped.rowCount,
       debugSample: scraped.debugSample,
