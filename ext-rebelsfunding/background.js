@@ -686,18 +686,28 @@ function fnScrapeContestStats() {
     const m = /-?[\d,]+(?:\.\d+)?/.exec(s);
     return m ? m[0].replace(/,/g, '').trim() : '';
   }
-  // Derives a "ceiling as % of Initial Balance" figure ourselves (e.g. a
-  // $2,000 Max Daily Drawdown limit on a $40,000 account -> "5") instead
+  // Derives a "ceiling as % of some base amount" figure ourselves instead
   // of reading it off the page's own "%" toggle view -- confirmed live
-  // (2026-11-18, same account) that RF-Trader's %-mode figure for every
-  // one of these ceiling fields (Max Daily Drawdown/Max Drawdown/Profit
-  // Target) is exactly limit/InitialBalance*100, so this is identical to
-  // what toggling to "%" and re-reading would show, without the extra
-  // toggle round-trip (and without ever leaving USD mode, which the used/
-  // limit $ amounts above depend on).
-  function pctOfInitial(amount, initialBalance) {
+  // (2026-11-18/19, two different accounts) that RF-Trader's %-mode
+  // figure for each ceiling field is exactly limit/base*100 for the right
+  // base, so this is identical to what toggling to "%" and re-reading
+  // would show, without the extra toggle round-trip (and without ever
+  // leaving USD mode, which the used/limit $ amounts above depend on).
+  // The base differs per field -- see each call site below: Max Daily
+  // Drawdown's $ limit itself resets daily off Today's Starting Equity
+  // (confirmed on account 22026430966691: a $2,025 limit against a
+  // $40,000 Initial Balance but a $40,499.60 Today's Starting Equity --
+  // 2025/40499.60 = 5.00%, matching the page's own %-mode reading exactly,
+  // while 2025/40000 = 5.06% does not), so its % must use startingEquity,
+  // not initialBalance. Max Drawdown/Profit Target are both pinned to the
+  // original challenge size instead (confirmed: Max Drawdown's own $
+  // limit was identically $4,000 on both a $40,000-Initial/$40,000-
+  // Starting account AND a $40,000-Initial/$40,499.60-Starting account --
+  // it did NOT scale with Starting Equity the way the daily one does), so
+  // those two keep using initialBalance.
+  function pctOfBase(amount, base) {
     const a = parseFloat(amount);
-    const b = parseFloat(initialBalance);
+    const b = parseFloat(base);
     if (!Number.isFinite(a) || !Number.isFinite(b) || b === 0) return '';
     return String(Math.round((a / b) * 10000) / 100);
   }
@@ -763,15 +773,17 @@ function fnScrapeContestStats() {
     initialBalance,
     startingEquity,
     maxDailyDrawdown: dailyBlock.limitAmount,
-    maxDailyDrawdownPct: pctOfInitial(dailyBlock.limitAmount, initialBalance),
+    // Today's Starting Equity, not Initial Balance -- see pctOfBase's own
+    // comment above for why.
+    maxDailyDrawdownPct: pctOfBase(dailyBlock.limitAmount, startingEquity),
     todayDrawdown: dailyBlock.usedAmount,
     todayDrawdownPct: dailyBlock.ratioPct,
     maxDrawdownAmount: overallBlock.limitAmount,
-    maxDrawdownPct: pctOfInitial(overallBlock.limitAmount, initialBalance),
+    maxDrawdownPct: pctOfBase(overallBlock.limitAmount, initialBalance),
     currentValueAmount: overallBlock.usedAmount,
     currentValuePct: overallBlock.ratioPct,
     profitTarget,
-    profitTargetPct: pctOfInitial(profitTarget, initialBalance),
+    profitTargetPct: pctOfBase(profitTarget, initialBalance),
     maxDdContext,
     // Fires whenever the positional read above didn't land on "Used /
     // allowed limit" as expected (line 4 of the block), so the real block
