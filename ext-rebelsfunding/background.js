@@ -729,14 +729,29 @@ function fnScrapeContestStats() {
   function readLimitBlock(labelPrefix) {
     const idx = lines.findIndex((l) => l.startsWith(labelPrefix));
     if (idx < 0) return { idx: -1, block: [], usedAmount: '', limitAmount: '', ratioPct: '', ratioLabelOk: false };
-    const block = lines.slice(idx, idx + 5);
-    const ratioLabelOk = (block[3] || '').startsWith('Used / allowed limit');
+    // Confirmed live 2026-11-19 (account 22026430966691, currently up for
+    // the day): RF-Trader inserts an extra "Above day-start equity: +X $"
+    // (daily block) / "Above initial balance: +X $" (overall block) line
+    // right after the label whenever equity is currently ABOVE that
+    // metric's baseline -- i.e. there's no current loss on that metric at
+    // all, so it says so instead of just showing "0.00 $" on its own.
+    // This shifts the normally-fixed 5-line block to 6 lines, so this
+    // skips that line (by prefix, not a fixed offset) rather than assuming
+    // a constant position -- without this, the real used/limit $ amounts
+    // one line later were silently read as if they were one position
+    // earlier (e.g. the $0.00 "no drawdown today" line got read as the
+    // LIMIT, zeroing out MaxDailyDrawdown/MaxDrawdownAmount for every
+    // currently-profitable account).
+    let cursor = idx + 1;
+    if (/^Above /.test(lines[cursor] || '')) cursor += 1;
+    const block = lines.slice(idx, cursor + 4);
+    const ratioLabelOk = (lines[cursor + 2] || '').startsWith('Used / allowed limit');
     return {
       idx,
       block,
-      usedAmount: moneyVal(block[1]),
-      limitAmount: moneyVal(block[2]),
-      ratioPct: ratioLabelOk ? pctVal(block[4]) : '',
+      usedAmount: moneyVal(lines[cursor]),
+      limitAmount: moneyVal(lines[cursor + 1]),
+      ratioPct: ratioLabelOk ? pctVal(lines[cursor + 3]) : '',
       ratioLabelOk,
     };
   }
